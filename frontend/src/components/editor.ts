@@ -113,6 +113,7 @@ import {
   type Building,
   type Floor,
   type Furniture,
+  type HideRule,
   type FurnitureType,
   type LampMount,
   type RoofSection,
@@ -11380,7 +11381,7 @@ export class Fp3dEditor extends LitElement {
             >
           </div>`
         : nothing}
-      ${isElectric(f.type) ? this.renderFurnitureLinks(f) : !NO_STATE_TYPES.has(f.type) ? html`<div class="fp3d-form fp3d-links">${this.renderStateLinks(f)}</div>` : nothing} ${GANG_TYPES.has(f.type) ? this.renderGangsForm(f) : nothing} ${TECH_TYPES.has(f.type) ? this.renderTechForm(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing} ${f.type === "waste_bin" || f.type === "mailbox" ? this.renderHouseholdForm(f) : this.renderHouseholdExtras(f)}
+      ${isElectric(f.type) ? this.renderFurnitureLinks(f) : !NO_STATE_TYPES.has(f.type) ? html`<div class="fp3d-form fp3d-links">${this.renderStateLinks(f)}</div>` : nothing} ${GANG_TYPES.has(f.type) ? this.renderGangsForm(f) : nothing} ${TECH_TYPES.has(f.type) ? this.renderTechForm(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing} ${f.type === "waste_bin" || f.type === "mailbox" ? this.renderHouseholdForm(f) : this.renderHouseholdExtras(f)} ${this.renderForkStateForm(f)}
       ${this.renderModuleFurnitureFields(f)}
       ${f.type.startsWith("pack:mastershort.vehicles:") && this.isAdmin
         ? html`<section>
@@ -11954,6 +11955,43 @@ export class Fp3dEditor extends LitElement {
       </div>
       <p class="fp3d-sub">${this.t("presence_hint")}</p>
     </details>`;
+  }
+
+  /** Fork (fedgar): per-item state rules – no glow at all, and hide the item by an entity's state. */
+  private renderForkStateForm(f: Furniture) {
+    const r = f.hide_when ?? null;
+    const admin = this.isAdmin;
+    const setRule = (patch: Partial<HideRule> | null) => {
+      if (patch === null) return this.updateFurniture({ hide_when: null });
+      const next: HideRule = { entity: r?.entity ?? "", states: r?.states ?? [], show_only: r?.show_only ?? false, ...patch };
+      this.updateFurniture({ hide_when: next.entity ? next : null });
+    };
+    return html`<div class="fp3d-form fp3d-links">
+      <label class="fp3d-field fp3d-wide"
+        ><input type="checkbox" .checked=${!!f.glow_off} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ glow_off: (e.target as HTMLInputElement).checked || undefined })} />
+        ${this.t("fork_glow_off")}</label
+      >
+      ${this.entitySelect(this.t("fork_hide_entity"), r?.entity || null, undefined, this.entityOptions(() => true), (v) => (v && v !== "none" ? setRule({ entity: v }) : setRule(null)))}
+      ${r?.entity
+        ? html`<label class="fp3d-field"
+              >${this.t("fork_hide_mode")}
+              <select ?disabled=${!admin} @change=${(e: Event) => setRule({ show_only: (e.target as HTMLSelectElement).value === "show" })}>
+                <option value="hide" ?selected=${!r.show_only}>${this.t("fork_hide_mode_hide")}</option>
+                <option value="show" ?selected=${!!r.show_only}>${this.t("fork_hide_mode_show")}</option>
+              </select></label
+            >
+            <label class="fp3d-field"
+              >${this.t("fork_hide_states")}
+              <input
+                type="text"
+                .value=${(r.states ?? []).join(", ")}
+                placeholder=${(this.hass?.states[r.entity]?.state ?? "off") + ", unavailable"}
+                ?disabled=${!admin}
+                @change=${(e: Event) => setRule({ states: (e.target as HTMLInputElement).value.split(",").map((x) => x.trim()).filter(Boolean) })}
+            /></label>`
+        : nothing}
+      <p class="fp3d-sub fp3d-wide">${this.t("fork_hide_hint")}</p>
+    </div>`;
   }
 
   /** "State from": an entity lights the item's top (two light its halves) – any furniture, a bed with occupancy mats too (#116). */

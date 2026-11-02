@@ -123,7 +123,7 @@ import { load3d } from "../load3d.ts";
 import { loadFun } from "../load-fun.ts";
 import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, openMoreInfo, setCameraSensors, stateText, toggleEntity } from "../markers.ts";
 import { activeSections, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
-import { centroid, furnitureFootprint, gangEntities, gangsOf, GANG_TYPES, STAIR_TYPES, TECH_TYPES, isLamp, setTerrain, poolFloorY, LAMP_MODEL, LIFT_SPOTS, outdoorGround, pointInPolygon, poolWaterY, spotDepth, surfaceHeight, zonesOf, type Building, type Floor, type Furniture, type Pet, type StartView } from "../model.ts";
+import { centroid, furnitureFootprint, gangEntities, gangsOf, GANG_TYPES, STAIR_TYPES, TECH_TYPES, isLamp, setTerrain, poolFloorY, LAMP_MODEL, LIFT_SPOTS, outdoorGround, pointInPolygon, poolWaterY, spotDepth, surfaceHeight, zonesOf, type Building, type Floor, type Furniture, type Pet, type StartView, hiddenFurnitureIds } from "../model.ts";
 
 import { pathLength, pipePath, pointAlong, type P3 } from "../geometry/runs.ts";
 import { pipePieces, poolAreas, poolNodeAt, poolWallNormal, underBasin, PIPE_IDLE, type PipePiece } from "../pool-runs.ts";
@@ -1019,6 +1019,14 @@ export class Fp3dView3d extends LitElement {
       v.setBuilding(this.shownBuilding()!);
       if (startChanged && this.floorId === null) v.resetView();
     } else if (changed.has("plain") && changed.get("plain") !== undefined && this.building) v.setBuilding(this.shownBuilding()!);
+    // fork (fedgar): an entity hid or showed an item: rebuild the scene without it (only when the set changes)
+    else if (changed.has("hass") && this.hass && this.building) {
+      const key = [...hiddenFurnitureIds(this.plainBuilding()!, this.hass.states)].sort().join(",");
+      if (key !== this.shownHideKey) {
+        v.setBuilding(this.shownBuilding()!);
+        this.syncDevices(true);
+      }
+    }
     if (changed.has("building") || changed.has("packs") || changed.has("petsOn")) void this.syncPets();
     if (changed.has("building") || changed.has("packs") || changed.has("ghostOn")) void this.syncGhost();
     if (changed.has("startView") && changed.get("startView") !== undefined) {
@@ -1193,6 +1201,8 @@ export class Fp3dView3d extends LitElement {
     for (const m of this.scene) if (m.kind === "marker" && m.card && m.furnitureId && !furniture.targets.has(m.furnitureId)) furniture.targets.set(m.furnitureId, `module:${m.id}`);
     v.setTrail(trail, this.replay ? this.robotPaths(hass, b) : []);
     v.setPickTargets(furniture.targets, this.openingTargets());
+    // fork (fedgar): items set to "no glow" keep their screen and state plate dark
+    for (const fl of b.floors) for (const f of fl.furniture) if (f.glow_off) furniture.screens.delete(f.id);
     v.setScreens(furniture.screens);
     v.setFridgeDoors(fridgeDoors(hass, b.floors));
     v.setAwnings(awningStates(hass, b.floors));
@@ -2689,8 +2699,10 @@ export class Fp3dView3d extends LitElement {
     this.binHolos = [];
     // a module lights furniture of its own (Pool Pro: the pump while it runs, the heat pump while it heats)
     const glows = new Map(this.scene.filter((p): p is Extract<ScenePiece, { kind: "glow" }> => p.kind === "glow").map((p) => [p.furnitureId, p]));
+    const hiddenNow = hiddenFurnitureIds(b, hass.states);
     for (const floor of b.floors) {
       for (const f of floor.furniture) {
+        if (hiddenNow.has(f.id)) continue;
         const linked = this.furnitureLinks.get(f.id);
         // furniture with a state: a glowing plate on the item while its entity is on, occupied or home;
         // two entities light the halves (left/right of a bed, bottom/top of a bunk bed)
@@ -3576,7 +3588,7 @@ export class Fp3dView3d extends LitElement {
       text: st ? stateText(hass, st) : "",
       active: st ? isActive(st) : false,
       unavailable: st ? isUnavailable(st) : false,
-      glow: st ? scaleGlow(onlyColor(lightGlow(st, f.color_entity && f.color_entity !== "none" ? hass.states[f.color_entity] : undefined), f.only_color), f.glow_scale) : null,
+      glow: st && !f.glow_off ? scaleGlow(onlyColor(lightGlow(st, f.color_entity && f.color_entity !== "none" ? hass.states[f.color_entity] : undefined), f.only_color), f.glow_scale) : null,
       lamp: model,
       rotation: f.rotation,
       mirror: !!f.mirror,
@@ -4867,6 +4879,22 @@ export class Fp3dView3d extends LitElement {
    * pack stairs stay (they cut the floors); lamps go with the rest, the device pins stay.
    */
   private shownBuilding(): Building | null {
+    const base = this.plainBuilding();
+    if (!base) return base;
+    // fork (fedgar): items hidden by their entity's state stay out of the scene
+    const hidden = this.hass ? hiddenFurnitureIds(base, this.hass.states) : new Set<string>();
+    this.shownHideKey = [...hidden].sort().join(",");
+    if (!hidden.size) return base;
+    if (this.hiddenOf?.from === base && this.hiddenOf.key === this.shownHideKey) return this.hiddenOf.to;
+    const to = { ...base, floors: base.floors.map((f) => ({ ...f, furniture: f.furniture.filter((x) => !hidden.has(x.id)) })) };
+    this.hiddenOf = { from: base, key: this.shownHideKey, to };
+    return to;
+  }
+
+  private hiddenOf: { from: Building; key: string; to: Building } | null = null;
+  private shownHideKey = "";
+
+  private plainBuilding(): Building | null {
     const b = this.building;
     if (!b || !this.plain) return b;
     if (this.plainOf?.from === b) return this.plainOf.to;
