@@ -105,6 +105,8 @@ export interface Opening {
   contact2: string | null;
   /** Door: its smart lock (lock.*) – shown as a pin at the door, locked or not (D636). */
   lock?: EntityRef;
+  /** Fork (fedgar): false hides the lock's pin at the door (tapping the door still offers to lock or unlock). */
+  lock_pin?: boolean | null;
   /** Windows: which sensors report the sash (null: a contact, plus a tilt sensor when one is set). */
   sensor?: "contact" | "handle" | "contact_tilt" | null;
   /** The same for the second leaf of a double window, with its own tilt sensor. */
