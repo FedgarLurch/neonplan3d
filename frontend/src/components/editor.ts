@@ -113,7 +113,8 @@ import {
   type Building,
   type Floor,
   type Furniture,
-  type HideRule,
+  type VisibilityCondition,
+  visibilityOf,
   type FurnitureType,
   type LampMount,
   type RoofSection,
@@ -11957,40 +11958,72 @@ export class Fp3dEditor extends LitElement {
     </details>`;
   }
 
-  /** Fork (fedgar): per-item state rules – no glow at all, and hide the item by an entity's state. */
+  /** Fork (fedgar): no glow, and visibility conditions like a Home Assistant card ("Entity state": state is / state is not). */
   private renderForkStateForm(f: Furniture) {
-    const r = f.hide_when ?? null;
     const admin = this.isAdmin;
-    const setRule = (patch: Partial<HideRule> | null) => {
-      if (patch === null) return this.updateFurniture({ hide_when: null });
-      const next: HideRule = { entity: r?.entity ?? "", states: r?.states ?? [], show_only: r?.show_only ?? false, ...patch };
-      this.updateFurniture({ hide_when: next.entity ? next : null });
+    const conds = visibilityOf(f);
+    const save = (next: VisibilityCondition[]) => this.updateFurniture({ visibility: next.length ? next : null, hide_when: null });
+    const setAt = (i: number, patch: Partial<VisibilityCondition> & { op?: "is" | "not"; value?: string }) => {
+      const next = conds.map((c) => ({ ...c }));
+      const c = next[i];
+      const op = patch.op ?? (c.state_not !== undefined ? "not" : "is");
+      const raw = patch.value ?? [c.state ?? c.state_not ?? []].flat().join(", ");
+      const vals = raw.split(",").map((x) => x.trim()).filter(Boolean);
+      const value: string | string[] = vals.length === 1 ? vals[0] : vals;
+      next[i] = { condition: "state", entity: patch.entity ?? c.entity, ...(op === "is" ? { state: value } : { state_not: value }) };
+      save(next);
+    };
+    const stateOptions = (entity: string): string[] => {
+      const st = this.hass?.states[entity];
+      const dom = entity.split(".")[0];
+      const by: Record<string, string[]> = {
+        lock: ["locked", "unlocked", "locking", "unlocking", "open", "jammed"],
+        cover: ["open", "closed", "opening", "closing"],
+        person: ["home", "not_home"],
+        device_tracker: ["home", "not_home"],
+        media_player: ["on", "off", "playing", "paused", "idle", "standby"],
+        alarm_control_panel: ["disarmed", "armed_home", "armed_away", "armed_night", "triggered"],
+        vacuum: ["cleaning", "docked", "returning", "idle", "paused", "error"],
+      };
+      const attr = (st?.attributes?.options ?? st?.attributes?.hvac_modes) as unknown;
+      const list = [st?.state, ...(by[dom] ?? (Array.isArray(attr) ? (attr as string[]) : ["on", "off"])), "unavailable", "unknown"];
+      return [...new Set(list.filter((x): x is string => !!x))];
     };
     return html`<div class="fp3d-form fp3d-links">
       <label class="fp3d-field fp3d-wide"
         ><input type="checkbox" .checked=${!!f.glow_off} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ glow_off: (e.target as HTMLInputElement).checked || undefined })} />
         ${this.t("fork_glow_off")}</label
       >
-      ${this.entitySelect(this.t("fork_hide_entity"), r?.entity || null, undefined, this.entityOptions(() => true), (v) => (v && v !== "none" ? setRule({ entity: v }) : setRule(null)))}
-      ${r?.entity
-        ? html`<label class="fp3d-field"
-              >${this.t("fork_hide_mode")}
-              <select ?disabled=${!admin} @change=${(e: Event) => setRule({ show_only: (e.target as HTMLSelectElement).value === "show" })}>
-                <option value="hide" ?selected=${!r.show_only}>${this.t("fork_hide_mode_hide")}</option>
-                <option value="show" ?selected=${!!r.show_only}>${this.t("fork_hide_mode_show")}</option>
-              </select></label
-            >
-            <label class="fp3d-field"
-              >${this.t("fork_hide_states")}
-              <input
-                type="text"
-                .value=${(r.states ?? []).join(", ")}
-                placeholder=${(this.hass?.states[r.entity]?.state ?? "off") + ", unavailable"}
-                ?disabled=${!admin}
-                @change=${(e: Event) => setRule({ states: (e.target as HTMLInputElement).value.split(",").map((x) => x.trim()).filter(Boolean) })}
-            /></label>`
-        : nothing}
-      <p class="fp3d-sub fp3d-wide">${this.t("fork_hide_hint")}</p>
+      <div class="fp3d-sub fp3d-wide">${this.t("fork_visibility")}</div>
+      ${conds.map((c, i) => {
+        const op = c.state_not !== undefined ? "not" : "is";
+        const value = [c.state ?? c.state_not ?? []].flat().join(", ");
+        const list = `fork-states-${f.id}-${i}`;
+        return html`${this.entitySelect(this.t("fork_entity"), c.entity || null, undefined, this.entityOptions(() => true), (v) => (v && v !== "none" ? setAt(i, { entity: v }) : save(conds.filter((_, j) => j !== i))))}
+          <label class="fp3d-field"
+            >${this.t("fork_state")}
+            <select ?disabled=${!admin} @change=${(e: Event) => setAt(i, { op: (e.target as HTMLSelectElement).value === "not" ? "not" : "is" })}>
+              <option value="is" ?selected=${op === "is"}>${this.t("fork_state_is")}</option>
+              <option value="not" ?selected=${op === "not"}>${this.t("fork_state_is_not")}</option>
+            </select></label
+          >
+          <label class="fp3d-field"
+            >&nbsp;
+            <input type="text" list=${list} .value=${value} ?disabled=${!admin} @change=${(e: Event) => setAt(i, { value: (e.target as HTMLInputElement).value })} />
+            <datalist id=${list}>${stateOptions(c.entity).map((o) => html`<option value=${o}></option>`)}</datalist></label
+          >
+          <button class="fp3d-btn fp3d-danger" ?disabled=${!admin} @click=${() => save(conds.filter((_, j) => j !== i))}>${this.t("fork_remove")}</button>`;
+      })}
+      <button
+        class="fp3d-btn"
+        ?disabled=${!admin}
+        @click=${() => {
+          const first = f.entity && f.entity !== "none" ? f.entity : f.state_entity && f.state_entity !== "none" ? f.state_entity : "";
+          save([...conds, { condition: "state", entity: first || "", state: first ? (this.hass?.states[first]?.state ?? "on") : "on" }]);
+        }}
+      >
+        ${this.t("fork_add_condition")}
+      </button>
     </div>`;
   }
 
