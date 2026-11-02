@@ -11990,7 +11990,7 @@ export class Fp3dEditor extends LitElement {
       return [...new Set(list.filter((x): x is string => !!x))];
     };
     return html`<div class="fp3d-form fp3d-links">
-      <label class="fp3d-field fp3d-wide"
+      <label class="fp3d-check fp3d-wide"
         ><input type="checkbox" .checked=${!!f.glow_off} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ glow_off: (e.target as HTMLInputElement).checked || undefined })} />
         ${this.t("fork_glow_off")}</label
       >
