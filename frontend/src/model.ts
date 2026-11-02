@@ -169,6 +169,32 @@ export interface Gang {
   power?: string | null;
 }
 
+/** Fork (fedgar): when an item is hidden in 3D, by an entity's state. */
+export interface HideRule {
+  entity: string;
+  /** States that hide the item, compared case-insensitively ("off", "unlocked", "not_home"). */
+  states: string[];
+  /** Turned round: the item shows only while the entity is in one of the states. */
+  show_only?: boolean;
+}
+
+/** Fork (fedgar): is this item hidden right now? An unknown entity hides nothing. */
+export function furnitureHidden(f: Pick<Furniture, "hide_when">, states: Record<string, { state: string } | undefined>): boolean {
+  const r = f.hide_when;
+  if (!r || !r.entity || !Array.isArray(r.states) || !r.states.length) return false;
+  const st = states[r.entity]?.state;
+  if (st === undefined) return false;
+  const hit = r.states.some((x) => String(x).trim().toLowerCase() === st.toLowerCase());
+  return r.show_only ? !hit : hit;
+}
+
+/** Fork (fedgar): ids of every item hidden right now, across the floors. */
+export function hiddenFurnitureIds(b: { floors: { furniture: Furniture[] }[] }, states: Record<string, { state: string } | undefined>): Set<string> {
+  const out = new Set<string>();
+  for (const fl of b.floors) for (const f of fl.furniture) if (furnitureHidden(f, states)) out.add(f.id);
+  return out;
+}
+
 export interface Furniture {
   /** Fixed against moving by accident. */
   locked?: boolean | null;
@@ -195,6 +221,10 @@ export interface Furniture {
   show_name?: boolean;
   /** Lamps: how strongly the lamp glows in 3D, 0.1–1.5 (1 = as bright as the light reports) – #181. */
   glow_scale?: number | null;
+  /** Fork (fedgar): no glow in 3D at all – a screen, a lamp or a state plate stays dark while its entity is on. */
+  glow_off?: boolean;
+  /** Fork (fedgar): hide the item while an entity is in one of these states (or, with show_only, unless it is). */
+  hide_when?: HideRule | null;
   /**
    * Lamps: glow only while the light shows this colour ("#rrggbb", similar shades count) – a colour light used as a
    * signal (yellow: water) does not show its other colours here. Null: every colour.
