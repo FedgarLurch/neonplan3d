@@ -3256,7 +3256,7 @@ var li=globalThis,di=li.ShadowRoot&&(li.ShadyCSS===void 0||li.ShadyCSS.nativeSha
       </div>
       <p class="fp3d-sub">${this.t("presence_hint")}</p>
     </details>`}renderForkStateForm(e){let t=this.isAdmin,n=Aa(e),i=r=>this.updateFurniture({visibility:r.length?r:null,hide_when:null}),o=(r,l)=>{let h=n.map(g=>({...g})),d=h[r],c=l.op??(d.state_not!==void 0?"not":"is"),u=(l.value??[d.state??d.state_not??[]].flat().join(", ")).split(",").map(g=>g.trim()).filter(Boolean),f=u.length===1?u[0]:u;h[r]={condition:"state",entity:l.entity??d.entity,...c==="is"?{state:f}:{state_not:f}},i(h)},s=r=>{let l=this.hass?.states[r],h=r.split(".")[0],d={lock:["locked","unlocked","locking","unlocking","open","jammed"],cover:["open","closed","opening","closing"],person:["home","not_home"],device_tracker:["home","not_home"],media_player:["on","off","playing","paused","idle","standby"],alarm_control_panel:["disarmed","armed_home","armed_away","armed_night","triggered"],vacuum:["cleaning","docked","returning","idle","paused","error"]},c=l?.attributes?.options??l?.attributes?.hvac_modes,p=[l?.state,...d[h]??(Array.isArray(c)?c:["on","off"]),"unavailable","unknown"];return[...new Set(p.filter(u=>!!u))]};return m`<div class="fp3d-form fp3d-links">
-      <label class="fp3d-field fp3d-wide"
+      <label class="fp3d-check fp3d-wide"
         ><input type="checkbox" .checked=${!!e.glow_off} ?disabled=${!t} @change=${r=>this.updateFurniture({glow_off:r.target.checked||void 0})} />
         ${this.t("fork_glow_off")}</label
       >
