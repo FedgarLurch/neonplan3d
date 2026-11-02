@@ -4560,7 +4560,7 @@ export class Fp3dView3d extends LitElement {
     for (const floor of b.floors) {
       for (const o of floor.openings) {
         const lock = this.openingLinks?.get(o.id)?.lock;
-        if (!lock) continue;
+        if (!lock || o.lock_pin === false) continue;
         // on a double door the lock sits on the main leaf, not on the seam between the leaves (#645)
         const spot = this.openingSpot(b, o.id, true);
         if (!spot) continue;

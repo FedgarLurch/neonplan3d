@@ -11246,6 +11246,12 @@ export class Fp3dEditor extends LitElement {
                     </select></label
                   >
                   ${this.entitySelect(this.t("door_lock"), o.lock ?? null, undefined, this.entityOptions((id) => id.startsWith("lock.")), (v) => this.updateOpening({ lock: v === "none" ? null : v }))}
+                  ${o.lock && o.lock !== "none"
+                    ? html`<label class="fp3d-check fp3d-wide"
+                        ><input type="checkbox" .checked=${o.lock_pin !== false} ?disabled=${!admin} @change=${(ev: Event) => this.updateOpening({ lock_pin: (ev.target as HTMLInputElement).checked ? null : false })} />
+                        ${this.t("fork_lock_pin")}</label
+                      >`
+                    : nothing}
                   <p class="fp3d-sub fp3d-wide">${this.t("door_lock_hint")}</p>`
                 : nothing}`}
         ${o.contact !== "none" && (o.contact || o.contact2 || autoPick("contact"))
