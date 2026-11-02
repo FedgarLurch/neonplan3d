@@ -169,23 +169,45 @@ export interface Gang {
   power?: string | null;
 }
 
-/** Fork (fedgar): when an item is hidden in 3D, by an entity's state. */
+/** Fork (fedgar): when an item is hidden in 3D, by an entity's state (legacy form, read as a visibility condition). */
 export interface HideRule {
   entity: string;
-  /** States that hide the item, compared case-insensitively ("off", "unlocked", "not_home"). */
   states: string[];
-  /** Turned round: the item shows only while the entity is in one of the states. */
   show_only?: boolean;
 }
 
-/** Fork (fedgar): is this item hidden right now? An unknown entity hides nothing. */
-export function furnitureHidden(f: Pick<Furniture, "hide_when">, states: Record<string, { state: string } | undefined>): boolean {
+/** Fork (fedgar): a visibility condition as Home Assistant writes it on a card ("Entity state": state / state_not). */
+export interface VisibilityCondition {
+  condition: "state";
+  entity: string;
+  state?: string | string[];
+  state_not?: string | string[];
+}
+
+const asList = (v: string | string[] | undefined): string[] => (v === undefined ? [] : Array.isArray(v) ? v : [v]).map((x) => String(x).trim().toLowerCase()).filter(Boolean);
+
+/** Fork (fedgar): the item's visibility conditions (the legacy hide_when rule turned into one). */
+export function visibilityOf(f: Pick<Furniture, "visibility" | "hide_when">): VisibilityCondition[] {
+  if (Array.isArray(f.visibility)) return f.visibility.filter((c) => c && c.entity);
   const r = f.hide_when;
-  if (!r || !r.entity || !Array.isArray(r.states) || !r.states.length) return false;
-  const st = states[r.entity]?.state;
-  if (st === undefined) return false;
-  const hit = r.states.some((x) => String(x).trim().toLowerCase() === st.toLowerCase());
-  return r.show_only ? !hit : hit;
+  if (!r || !r.entity || !Array.isArray(r.states) || !r.states.length) return [];
+  return [r.show_only ? { condition: "state", entity: r.entity, state: r.states } : { condition: "state", entity: r.entity, state_not: r.states }];
+}
+
+/** Fork (fedgar): one condition, as Home Assistant checks it: "state" needs the entity in one of the states, "state_not" in none. */
+export function conditionMet(c: VisibilityCondition, states: Record<string, { state: string } | undefined>): boolean {
+  const st = states[c.entity]?.state?.toLowerCase();
+  const is = asList(c.state);
+  const not = asList(c.state_not);
+  if (is.length && (st === undefined || !is.includes(st))) return false;
+  if (not.length && st !== undefined && not.includes(st)) return false;
+  return true;
+}
+
+/** Fork (fedgar): is this item hidden right now? Shown only while all its conditions are met. */
+export function furnitureHidden(f: Pick<Furniture, "visibility" | "hide_when">, states: Record<string, { state: string } | undefined>): boolean {
+  const conds = visibilityOf(f);
+  return conds.length > 0 && !conds.every((c) => conditionMet(c, states));
 }
 
 /** Fork (fedgar): ids of every item hidden right now, across the floors. */
@@ -223,8 +245,10 @@ export interface Furniture {
   glow_scale?: number | null;
   /** Fork (fedgar): no glow in 3D at all – a screen, a lamp or a state plate stays dark while its entity is on. */
   glow_off?: boolean;
-  /** Fork (fedgar): hide the item while an entity is in one of these states (or, with show_only, unless it is). */
+  /** Fork (fedgar): legacy rule, read as a visibility condition. */
   hide_when?: HideRule | null;
+  /** Fork (fedgar): shown in 3D only while all conditions are met, like a card's visibility in Home Assistant. */
+  visibility?: VisibilityCondition[] | null;
   /**
    * Lamps: glow only while the light shows this colour ("#rrggbb", similar shades count) – a colour light used as a
    * signal (yellow: water) does not show its other colours here. Null: every colour.
