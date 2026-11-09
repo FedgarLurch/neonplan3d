@@ -319,3 +319,86 @@ def module_sha(pack: dict[str, Any] | None) -> str | None:
     if not isinstance(module, dict) or not isinstance(module.get("code"), str):
         return None
     return hashlib.sha256(module["code"].encode("utf-8")).hexdigest()
+
+
+# ---------------------------------------------------------------- fork (fedgar): local packs
+# Folders with a pack.json and .glb models, read from the integration's own frontend/packs/ (packs shipped with
+# the fork, like the garden pack) and from <config>/www/neonplan3d/packs/ (your own). They are not signed: they
+# can only add furniture (no Pro features, no code), and only someone with access to the files can add them.
+# Their items carry a model file instead of parts.
+
+LOCAL_ITEM_SCHEMA = vol.Schema(
+    {
+        **{k: v for k, v in ITEM_SCHEMA.schema.items() if str(k) != "parts"},
+        vol.Optional("parts", default=[]): vol.All([PART_SCHEMA], vol.Length(max=60)),
+        # the model file next to pack.json
+        vol.Required("model"): vol.All(str, vol.Match(r"^[A-Za-z0-9][A-Za-z0-9_\-. ]*\.(glb|gltf)$")),
+        # colours pulled into the neon look, or kept
+        vol.Optional("tone", default="neon"): vol.In(["neon", "original"]),
+        # draw the model's outline
+        vol.Optional("edges", default=True): bool,
+        # it grows: the item's "Growth" (1 to 10) draws it at that part of its full size
+        vol.Optional("growth", default=False): bool,
+    }
+)
+
+LOCAL_PACK_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): vol.All(_ID, vol.Match(r"^local\.")),
+        vol.Required("name"): _TEXT,
+        vol.Optional("publisher", default="Local"): _TEXT,
+        vol.Optional("release", default=1): vol.All(int, vol.Range(min=1, max=100000)),
+        vol.Optional("description", default=""): vol.All(str, vol.Length(max=400)),
+        vol.Required("items"): vol.All([LOCAL_ITEM_SCHEMA], vol.Length(min=1, max=200)),
+    },
+    extra=vol.REMOVE_EXTRA,
+)
+
+
+def load_local_packs(folders: list[tuple[Any, str]]) -> list[dict[str, Any]]:
+    """Read every <folder>/<pack>/pack.json; `folders` are (path, url base) pairs. Broken packs are skipped."""
+    import logging
+    from pathlib import Path
+
+    log = logging.getLogger(__name__)
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for root, url in folders:
+        root = Path(root)
+        if not root.is_dir():
+            continue
+        for folder in sorted(p for p in root.iterdir() if p.is_dir()):
+            manifest = folder / "pack.json"
+            if not manifest.is_file():
+                continue
+            try:
+                pack = LOCAL_PACK_SCHEMA(json.loads(manifest.read_text(encoding="utf-8")))
+            except (ValueError, vol.Invalid) as err:
+                log.warning("NeonPlan 3D: local pack %s skipped: %s", folder.name, err)
+                continue
+            if pack["id"] in seen:
+                continue
+            items = []
+            for item in pack["items"]:
+                file = folder / item["model"]
+                if not file.is_file():
+                    log.warning("NeonPlan 3D: %s in local pack %s is missing", item["model"], folder.name)
+                    continue
+                # the file's time in the URL: a new model under the same name is fetched anew
+                items.append({**item, "model": f"{url}/{folder.name}/{item['model']}?v={int(file.stat().st_mtime)}"})
+            if not items:
+                continue
+            seen.add(pack["id"])
+            out.append(
+                {
+                    **pack,
+                    "items": items,
+                    "format": PACK_FORMAT,
+                    "version": PACK_VERSION,
+                    "licensee": None,
+                    "instance": None,
+                    "features": [],
+                    "local": True,
+                }
+            )
+    return out

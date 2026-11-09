@@ -221,12 +221,23 @@ async def ws_history_restore(
 
 
 @websocket_api.websocket_command({vol.Required("type"): "neonplan3d/packs/list"})
-@callback
-def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+@websocket_api.async_response
+async def ws_packs_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
     """Return the imported furniture packs (every user needs them to see the furniture)."""
     if (data := _data(hass, connection, msg)) is None:
         return
-    connection.send_result(msg["id"], {"packs": [_without_code(p) for p in data.packs]})
+    # fork (fedgar): plus the local packs (model folders shipped with the fork or put in www/neonplan3d/packs)
+    from pathlib import Path
+
+    from .const import URL_BASE
+    from .packs import load_local_packs
+
+    folders = [
+        (Path(__file__).parent / "frontend" / "packs", f"{URL_BASE}/packs"),
+        (Path(hass.config.path("www", "neonplan3d", "packs")), "/local/neonplan3d/packs"),
+    ]
+    local = await hass.async_add_executor_job(load_local_packs, folders)
+    connection.send_result(msg["id"], {"packs": [_without_code(p) for p in data.packs] + local})
 
 
 def _without_code(pack: dict[str, Any]) -> dict[str, Any]:
@@ -740,7 +751,14 @@ def _list_models(folder: str) -> list[dict[str, Any]]:
             continue
         st = os.stat(path)
         # the file's time in the URL: a new upload under the same name is fetched anew, not taken from the cache
-        out.append({"name": name, "url": f"{MODELS_URL}/{name}?v={int(st.st_mtime)}", "size": st.st_size, "modified": st.st_mtime})
+        out.append(
+            {
+                "name": name,
+                "url": f"{MODELS_URL}/{name}?v={int(st.st_mtime)}",
+                "size": st.st_size,
+                "modified": st.st_mtime,
+            }
+        )
     return out
 
 
