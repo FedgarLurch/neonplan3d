@@ -12050,6 +12050,20 @@ export class Fp3dEditor extends LitElement {
         ><input type="checkbox" .checked=${!!f.glow_off} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ glow_off: (e.target as HTMLInputElement).checked || undefined })} />
         ${this.t("fork_glow_off")}</label
       >
+      ${isLamp(f.type)
+        ? html`<div class="fp3d-sub fp3d-wide">${this.t("fork_glow")}</div>
+            <label class="fp3d-check fp3d-wide"
+              ><input type="checkbox" .checked=${!!f.glow_when} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ glow_when: (e.target as HTMLInputElement).checked ? { color: "#00ff55", conditions: [] } : null })} />
+              ${this.t("fork_glow_own")}</label
+            >
+            ${f.glow_when
+              ? html`<label class="fp3d-field"
+                    >${this.t("fork_glow_color")}
+                    <input type="color" .value=${f.glow_when.color} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ glow_when: { ...f.glow_when!, color: (e.target as HTMLInputElement).value } })} /></label
+                  >
+                  ${this.renderConditionRows(`g-${f.id}`, f.glow_when.conditions ?? [], (next) => this.updateFurniture({ glow_when: { ...f.glow_when!, conditions: next } }), first)}`
+              : nothing}`
+        : nothing}
       <div class="fp3d-sub fp3d-wide">${this.t("fork_visibility")}</div>
       ${this.renderConditionRows(`v-${f.id}`, visibilityOf(f), (next) => this.updateFurniture({ visibility: next.length ? next : null, hide_when: null }), first)}
       ${versions.length
