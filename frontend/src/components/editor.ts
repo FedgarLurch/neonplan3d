@@ -114,6 +114,7 @@ import {
   type Floor,
   type Furniture,
   type VisibilityCondition,
+  type SwapRule,
   visibilityOf,
   type FurnitureType,
   type LampMount,
@@ -155,11 +156,11 @@ import { fetchBackup, restoreBackup, type BackupFile } from "../api.ts";
 import { deleteDiagnostics, getDiagnostics, setDiagnostics, type DiagnosticsStatus } from "../api.ts";
 import { load3d } from "../load3d.ts";
 import "./library.ts";
-import { basicTypes, buildIndex, roomKindOf, type LibraryEntry } from "../library-index.ts";
+import { basicTypes, buildIndex, familyOf, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { furnitureName } from "../furniture-names.ts";
-import { furnitureSize, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, type FurniturePack } from "../packs.ts";
+import { furnitureSize, getPacks, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, type FurniturePack } from "../packs.ts";
 
 /** Items that can be fixed against moving. */
 type FixKind = "room" | "opening" | "furniture" | "device" | "wall" | "outdoor";
@@ -11197,6 +11198,12 @@ export class Fp3dEditor extends LitElement {
         >`}
         ${window || garage || door ? this.entitySelect(this.t(window ? "cover_entity" : "door_cover"), o.cover, autoPick("cover"), garage ? garageDrives : covers, (v) => this.updateOpening({ cover: v })) : nothing}
         ${garage && isPulseDrive(o.cover) ? html`<p class="fp3d-sub fp3d-wide">${this.t("garage_pulse_hint")}</p>` : nothing}
+        ${window && o.cover && o.cover !== "none"
+          ? html`<label class="fp3d-check fp3d-wide"
+              ><input type="checkbox" .checked=${o.cover_inside === true} ?disabled=${!this.isAdmin} @change=${(ev: Event) => this.updateOpening({ cover_inside: (ev.target as HTMLInputElement).checked || null })} />
+              ${this.t("fork_cover_inside")}</label
+            >`
+          : nothing}
         ${(window || garage || door) && o.cover !== "none" && (o.cover || autoPick("cover"))
           ? html`${isPulseDrive(o.cover) ? nothing : this.entitySelect(this.t("cover_position_entity"), o.position ?? null, undefined, positions, (v) => this.updateOpening({ position: v === "none" ? null : v }))}
               ${o.position && !isPulseDrive(o.cover)
@@ -11964,18 +11971,16 @@ export class Fp3dEditor extends LitElement {
     </details>`;
   }
 
-  /** Fork (fedgar): no glow, and visibility conditions like a Home Assistant card ("Entity state": state is / state is not). */
-  private renderForkStateForm(f: Furniture) {
+  /** Fork (fedgar): condition rows like a Home Assistant card ("Entity state": Entity, State is / is not). */
+  private renderConditionRows(key: string, conds: VisibilityCondition[], save: (next: VisibilityCondition[]) => void, firstEntity: string) {
     const admin = this.isAdmin;
-    const conds = visibilityOf(f);
-    const save = (next: VisibilityCondition[]) => this.updateFurniture({ visibility: next.length ? next : null, hide_when: null });
-    const setAt = (i: number, patch: Partial<VisibilityCondition> & { op?: "is" | "not"; value?: string }) => {
-      const next = conds.map((c) => ({ ...c }));
-      const c = next[i];
+    const setAt = (i: number, patch: { entity?: string; op?: "is" | "not"; value?: string }) => {
+      const c = conds[i];
       const op = patch.op ?? (c.state_not !== undefined ? "not" : "is");
       const raw = patch.value ?? [c.state ?? c.state_not ?? []].flat().join(", ");
       const vals = raw.split(",").map((x) => x.trim()).filter(Boolean);
       const value: string | string[] = vals.length === 1 ? vals[0] : vals;
+      const next = conds.map((x) => ({ ...x }));
       next[i] = { condition: "state", entity: patch.entity ?? c.entity, ...(op === "is" ? { state: value } : { state_not: value }) };
       save(next);
     };
@@ -11995,16 +12000,10 @@ export class Fp3dEditor extends LitElement {
       const list = [st?.state, ...(by[dom] ?? (Array.isArray(attr) ? (attr as string[]) : ["on", "off"])), "unavailable", "unknown"];
       return [...new Set(list.filter((x): x is string => !!x))];
     };
-    return html`<div class="fp3d-form fp3d-links">
-      <label class="fp3d-check fp3d-wide"
-        ><input type="checkbox" .checked=${!!f.glow_off} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ glow_off: (e.target as HTMLInputElement).checked || undefined })} />
-        ${this.t("fork_glow_off")}</label
-      >
-      <div class="fp3d-sub fp3d-wide">${this.t("fork_visibility")}</div>
-      ${conds.map((c, i) => {
+    return html`${conds.map((c, i) => {
         const op = c.state_not !== undefined ? "not" : "is";
         const value = [c.state ?? c.state_not ?? []].flat().join(", ");
-        const list = `fork-states-${f.id}-${i}`;
+        const list = `fork-states-${key}-${i}`;
         return html`${this.entitySelect(this.t("fork_entity"), c.entity || null, undefined, this.entityOptions(() => true), (v) => (v && v !== "none" ? setAt(i, { entity: v }) : save(conds.filter((_, j) => j !== i))))}
           <label class="fp3d-field"
             >${this.t("fork_state")}
@@ -12023,13 +12022,47 @@ export class Fp3dEditor extends LitElement {
       <button
         class="fp3d-btn"
         ?disabled=${!admin}
-        @click=${() => {
-          const first = f.entity && f.entity !== "none" ? f.entity : f.state_entity && f.state_entity !== "none" ? f.state_entity : "";
-          save([...conds, { condition: "state", entity: first || "", state: first ? (this.hass?.states[first]?.state ?? "on") : "on" }]);
-        }}
+        @click=${() => save([...conds, { condition: "state", entity: firstEntity, state: firstEntity ? (this.hass?.states[firstEntity]?.state ?? "on") : "on" }])}
       >
         ${this.t("fork_add_condition")}
-      </button>
+      </button>`;
+  }
+
+  /** Fork (fedgar): no glow, visibility conditions like a Home Assistant card, and another version of the item by state. */
+  private renderForkStateForm(f: Furniture) {
+    const admin = this.isAdmin;
+    const first = f.entity && f.entity !== "none" ? f.entity : f.state_entity && f.state_entity !== "none" ? f.state_entity : "";
+    const item = packItem(f.type);
+    const fam = item ? familyOf(item) : null;
+    const versions = fam
+      ? getPacks()
+          .flatMap((p) => p.items.map((i) => ({ type: packType(p.id, i.id), i })))
+          .filter((x) => x.type !== f.type && familyOf(x.i) === fam)
+      : [];
+    const swap = f.swap ?? null;
+    const saveSwap = (next: Partial<SwapRule> | null) => {
+      if (next === null) return this.updateFurniture({ swap: null });
+      const r: SwapRule = { type: swap?.type ?? versions[0]?.type ?? "", visibility: swap?.visibility ?? [], ...next };
+      this.updateFurniture({ swap: r.type ? r : null });
+    };
+    return html`<div class="fp3d-form fp3d-links">
+      <label class="fp3d-check fp3d-wide"
+        ><input type="checkbox" .checked=${!!f.glow_off} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ glow_off: (e.target as HTMLInputElement).checked || undefined })} />
+        ${this.t("fork_glow_off")}</label
+      >
+      <div class="fp3d-sub fp3d-wide">${this.t("fork_visibility")}</div>
+      ${this.renderConditionRows(`v-${f.id}`, visibilityOf(f), (next) => this.updateFurniture({ visibility: next.length ? next : null, hide_when: null }), first)}
+      ${versions.length
+        ? html`<div class="fp3d-sub fp3d-wide">${this.t("fork_swap")}</div>
+            <label class="fp3d-field fp3d-wide"
+              >${this.t("fork_swap_to")}
+              <select ?disabled=${!admin} @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) saveSwap({ type: v }); else saveSwap(null); }}>
+                <option value="" ?selected=${!swap}>${this.t("fork_swap_none")}</option>
+                ${versions.map((x) => html`<option value=${x.type} ?selected=${swap?.type === x.type}>${packItemName(x.i, this.hass?.language ?? "en")}</option>`)}
+              </select></label
+            >
+            ${swap ? this.renderConditionRows(`s-${f.id}`, swap.visibility ?? [], (next) => saveSwap({ visibility: next }), first) : nothing}`
+        : nothing}
     </div>`;
   }
 

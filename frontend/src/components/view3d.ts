@@ -123,7 +123,7 @@ import { load3d } from "../load3d.ts";
 import { loadFun } from "../load-fun.ts";
 import { detectionKind, scaleGlow, buildMarkers, cameraMotionSensors, openMoreInfo, setCameraSensors, stateText, toggleEntity } from "../markers.ts";
 import { activeSections, roofUnderAt, sectionAbove, sectionCutsBelow } from "../roof-sections.ts";
-import { centroid, furnitureFootprint, gangEntities, gangsOf, GANG_TYPES, STAIR_TYPES, TECH_TYPES, isLamp, setTerrain, poolFloorY, LAMP_MODEL, LIFT_SPOTS, outdoorGround, pointInPolygon, poolWaterY, spotDepth, surfaceHeight, zonesOf, type Building, type Floor, type Furniture, type Pet, type StartView, hiddenFurnitureIds } from "../model.ts";
+import { centroid, furnitureFootprint, gangEntities, gangsOf, GANG_TYPES, STAIR_TYPES, TECH_TYPES, isLamp, setTerrain, poolFloorY, LAMP_MODEL, LIFT_SPOTS, outdoorGround, pointInPolygon, poolWaterY, spotDepth, surfaceHeight, zonesOf, type Building, type Floor, type Furniture, type Pet, type StartView, hiddenFurnitureIds, stateRulesKey, swapActive } from "../model.ts";
 
 import { pathLength, pipePath, pointAlong, type P3 } from "../geometry/runs.ts";
 import { pipePieces, poolAreas, poolNodeAt, poolWallNormal, underBasin, PIPE_IDLE, type PipePiece } from "../pool-runs.ts";
@@ -1021,7 +1021,7 @@ export class Fp3dView3d extends LitElement {
     } else if (changed.has("plain") && changed.get("plain") !== undefined && this.building) v.setBuilding(this.shownBuilding()!);
     // fork (fedgar): an entity hid or showed an item: rebuild the scene without it (only when the set changes)
     else if (changed.has("hass") && this.hass && this.building) {
-      const key = [...hiddenFurnitureIds(this.plainBuilding()!, this.hass.states)].sort().join(",");
+      const key = stateRulesKey(this.plainBuilding()!, this.hass.states);
       if (key !== this.shownHideKey) {
         v.setBuilding(this.shownBuilding()!);
         this.syncDevices(true);
@@ -4881,12 +4881,23 @@ export class Fp3dView3d extends LitElement {
   private shownBuilding(): Building | null {
     const base = this.plainBuilding();
     if (!base) return base;
-    // fork (fedgar): items hidden by their entity's state stay out of the scene
-    const hidden = this.hass ? hiddenFurnitureIds(base, this.hass.states) : new Set<string>();
-    this.shownHideKey = [...hidden].sort().join(",");
-    if (!hidden.size) return base;
+    // fork (fedgar): items hidden by their conditions stay out of the scene, swapped ones show their other version
+    const states = this.hass?.states ?? {};
+    this.shownHideKey = this.hass ? stateRulesKey(base, states) : "|";
+    if (this.shownHideKey === "|") return base;
     if (this.hiddenOf?.from === base && this.hiddenOf.key === this.shownHideKey) return this.hiddenOf.to;
-    const to = { ...base, floors: base.floors.map((f) => ({ ...f, furniture: f.furniture.filter((x) => !hidden.has(x.id)) })) };
+    const hidden = hiddenFurnitureIds(base, states);
+    const swap = (f: Furniture): Furniture => {
+      if (!f.swap || !swapActive(f, states)) return f;
+      const alt = packItem(f.swap.type);
+      if (!alt) return f;
+      // keep the back on the wall: the new depth grows or shrinks from the front
+      const d = alt.size[1];
+      const r = ((f.rotation ?? 0) * Math.PI) / 180;
+      const shift = (d - f.d) / 2;
+      return { ...f, type: f.swap.type, d, x: f.x - Math.sin(r) * shift, z: f.z + Math.cos(r) * shift };
+    };
+    const to = { ...base, floors: base.floors.map((fl) => ({ ...fl, furniture: fl.furniture.filter((x) => !hidden.has(x.id)).map(swap) })) };
     this.hiddenOf = { from: base, key: this.shownHideKey, to };
     return to;
   }
