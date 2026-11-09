@@ -235,6 +235,8 @@ export function ruleGlow(f: Pick<Furniture, "glow_when">, states: Record<string,
 /** Fork (fedgar): shown as another version of the item (a pack variant of the same family) while all conditions are met. */
 export interface SwapRule {
   type: string;
+  /** Fork (fedgar): for a custom model, the other model file shown while the conditions hold. */
+  model?: string;
   visibility: VisibilityCondition[];
 }
 
@@ -299,6 +301,12 @@ export interface Furniture {
   visibility?: VisibilityCondition[] | null;
   /** Fork (fedgar): shown as another version while its conditions are met (a wall bed open or closed). */
   swap?: SwapRule | null;
+  /** Fork (fedgar): custom model: the .glb file (a URL such as /local/neonplan3d/models/chair.glb). */
+  model?: string | null;
+  /** Fork (fedgar): custom model colours pulled into the neon look (default) or kept as they are. */
+  model_tone?: "neon" | "original" | null;
+  /** Fork (fedgar): custom model without its outline. */
+  model_edges?: boolean | null;
   /** Fork (fedgar): glows in its own colour by conditions, without a light (a lock bar green while locked). */
   glow_when?: GlowRule | null;
   /**
@@ -1497,6 +1505,7 @@ export const FURNITURE_TYPES = [
   "lamp_fan",
   "wifi_ap",
   "water_heater",
+  "custom_model",
 ] as const;
 
 /** Furniture library sections (the editor lists them in this order). */
@@ -1845,6 +1854,8 @@ export const FURNITURE_SIZE: Record<FurnitureType, [number, number, number]> = {
   // a ceiling access point (a UniFi disc); a standing hot water tank
   wifi_ap: [0.2, 0.2, 0.04],
   water_heater: [0.56, 0.56, 1.5],
+  // fork (fedgar): a custom model takes the model's own size once its file is chosen
+  custom_model: [1, 1, 1],
   robot_vacuum: [0.36, 0.5, 0.1],
   parking: [2.6, 5.2, 0.02],
   lamp_pendant: [0.4, 0.4, 0.8],
