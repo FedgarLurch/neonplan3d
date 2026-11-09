@@ -155,7 +155,7 @@ class Builder {
       const g = m.col[i * 3 + 1];
       const b = m.col[i * 3 + 2];
       if (tone === "original") return out.setRGB(Math.min(1, r * 0.85 * k), Math.min(1, g * 0.85 * k), Math.min(1, b * 0.85 * k));
-      return out.setRGB(Math.min(1, (body.r + r * 0.3) * k), Math.min(1, (body.g + g * 0.3) * k), Math.min(1, (body.b + b * 0.3) * k));
+      return out.setRGB(Math.min(1, (body.r + r * 0.12) * k), Math.min(1, (body.g + g * 0.12) * k), Math.min(1, (body.b + b * 0.12) * k));
     };
     for (let t = 0; t < m.tris; t++) {
       const a = pt(t * 3);
