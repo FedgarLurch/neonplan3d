@@ -1520,6 +1520,8 @@ export const FURNITURE_GROUPS: Record<string, FurnitureType[]> = {
   vehicles: ["parking"],
   outdoor: ["awning"],
   household: ["waste_bin", "mailbox"],
+  // fork (fedgar): your own .glb models
+  custom: ["custom_model"],
   switches: ["wall_switch", "wall_socket", "wifi_ap", "water_heater"],
 };
 
