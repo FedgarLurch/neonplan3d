@@ -379,14 +379,22 @@ export function buildOpeningParts(infos: readonly OpeningInfo[], states: Readonl
       }
     }
     // blind on the outside: box above the opening, slats down to the closed fraction
+    // fork (fedgar): or inside, on the room face – a slim headrail and a shade down over the opening
     if (st.cover !== null) {
-      const out = -info.faceOut;
-      const boxTop = T + 0.2;
-      splitBox(frames, tf, -0.05, W + 0.05, out - 0.15, out, T, boxTop, new Color(BLIND_BOX), frameTop, cut, bucket);
+      const inside = info.opening.cover_inside === true;
       const closed = Math.min(1, Math.max(0, st.cover));
-      if (closed > 0.01) {
-        const bottom = T - closed * (T - S);
-        panel(blinds, tf, 0, W, out - 0.07, bottom, T, new Color(0xffffff), cut, bucket, 0.045);
+      if (inside) {
+        const room = info.faceRoom;
+        splitBox(frames, tf, -0.04, W + 0.04, room, room + 0.07, T, T + 0.08, new Color(BLIND_BOX), frameTop, cut, bucket);
+        if (closed > 0.01) panel(blinds, tf, -0.02, W + 0.02, room + 0.035, T - closed * (T - S), T, new Color(0xffffff), cut, bucket, 0.045);
+      } else {
+        const out = -info.faceOut;
+        const boxTop = T + 0.2;
+        splitBox(frames, tf, -0.05, W + 0.05, out - 0.15, out, T, boxTop, new Color(BLIND_BOX), frameTop, cut, bucket);
+        if (closed > 0.01) {
+          const bottom = T - closed * (T - S);
+          panel(blinds, tf, 0, W, out - 0.07, bottom, T, new Color(0xffffff), cut, bucket, 0.045);
+        }
       }
     }
     frameTris.push({ id: info.opening.id, start: fStart, end: frames.count });
