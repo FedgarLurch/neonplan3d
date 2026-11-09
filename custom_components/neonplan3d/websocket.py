@@ -73,6 +73,9 @@ def async_register_commands(hass: HomeAssistant) -> None:
         ws_voice_settings_set,
         ws_voice_converse,
         ws_locate_rec,
+        ws_models_list,
+        ws_models_upload,
+        ws_models_delete,
     ):
         websocket_api.async_register_command(hass, command)
     for command in LOCATE_COMMANDS:
@@ -710,3 +713,113 @@ async def ws_modules_approve(
         connection.send_error(msg["id"], "not_found", "no module code with this fingerprint")
         return
     connection.send_result(msg["id"], {"approved": True})
+
+
+# ---------------------------------------------------------------- fork (fedgar): custom 3D models
+# Model files live in <config>/www/neonplan3d/models, so Home Assistant serves them at /local/neonplan3d/models/.
+# Uploads come in chunks (base64) to stay well below the websocket's message size.
+
+_MODEL_NAME = vol.All(str, vol.Length(min=5, max=80), vol.Match(r"^[A-Za-z0-9][A-Za-z0-9_\-. ]*\.(glb|gltf)$"))
+MAX_MODEL_BYTES = 40 * 1024 * 1024
+MODELS_URL = "/local/neonplan3d/models"
+
+
+def _models_dir(hass: HomeAssistant) -> str:
+    return hass.config.path("www", "neonplan3d", "models")
+
+
+def _list_models(folder: str) -> list[dict[str, Any]]:
+    import os
+
+    if not os.path.isdir(folder):
+        return []
+    out = []
+    for name in sorted(os.listdir(folder), key=str.lower):
+        path = os.path.join(folder, name)
+        if not name.lower().endswith((".glb", ".gltf")) or not os.path.isfile(path):
+            continue
+        st = os.stat(path)
+        # the file's time in the URL: a new upload under the same name is fetched anew, not taken from the cache
+        out.append({"name": name, "url": f"{MODELS_URL}/{name}?v={int(st.st_mtime)}", "size": st.st_size, "modified": st.st_mtime})
+    return out
+
+
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/models/list"})
+@websocket_api.async_response
+async def ws_models_list(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]) -> None:
+    """The model files that can be placed."""
+    models = await hass.async_add_executor_job(_list_models, _models_dir(hass))
+    connection.send_result(msg["id"], {"models": models})
+
+
+def _write_chunk(folder: str, name: str, index: int, chunk: bytes, last: bool) -> int:
+    import os
+
+    os.makedirs(folder, exist_ok=True)
+    part = os.path.join(folder, f".{name}.part")
+    with open(part, "wb" if index == 0 else "ab") as fh:
+        fh.write(chunk)
+    size = os.path.getsize(part)
+    if size > MAX_MODEL_BYTES:
+        os.remove(part)
+        raise ValueError("too_big")
+    if last:
+        os.replace(part, os.path.join(folder, name))
+    return size
+
+
+@websocket_api.websocket_command(
+    {
+        vol.Required("type"): "neonplan3d/models/upload",
+        vol.Required("name"): _MODEL_NAME,
+        vol.Required("index"): vol.All(int, vol.Range(min=0, max=1000)),
+        vol.Required("data"): vol.All(str, vol.Length(max=2 * 1024 * 1024)),
+        vol.Optional("last", default=False): bool,
+    }
+)
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_models_upload(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Receive one chunk of a model file; the last chunk puts the file in place."""
+    import base64
+    import binascii
+
+    try:
+        chunk = base64.b64decode(msg["data"], validate=True)
+    except (binascii.Error, ValueError):
+        connection.send_error(msg["id"], "invalid_format", "Chunk is not base64")
+        return
+    if msg["index"] == 0 and msg["name"].lower().endswith(".glb") and chunk[:4] != b"glTF":
+        connection.send_error(msg["id"], "invalid_format", "Not a .glb file")
+        return
+    try:
+        size = await hass.async_add_executor_job(
+            _write_chunk, _models_dir(hass), msg["name"], msg["index"], chunk, msg["last"]
+        )
+    except ValueError:
+        connection.send_error(msg["id"], "too_big", f"Model files can be at most {MAX_MODEL_BYTES // (1024 * 1024)} MB")
+        return
+    connection.send_result(msg["id"], {"size": size, "url": f"{MODELS_URL}/{msg['name']}" if msg["last"] else None})
+
+
+def _delete_model(folder: str, name: str) -> bool:
+    import os
+
+    path = os.path.join(folder, name)
+    if not os.path.isfile(path):
+        return False
+    os.remove(path)
+    return True
+
+
+@websocket_api.websocket_command({vol.Required("type"): "neonplan3d/models/delete", vol.Required("name"): _MODEL_NAME})
+@websocket_api.require_admin
+@websocket_api.async_response
+async def ws_models_delete(
+    hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict[str, Any]
+) -> None:
+    """Remove a model file (items that still use it are drawn as boxes)."""
+    removed = await hass.async_add_executor_job(_delete_model, _models_dir(hass), msg["name"])
+    connection.send_result(msg["id"], {"removed": removed})
