@@ -5624,6 +5624,8 @@ function makeGroundTexture(): CanvasTexture {
 }
 
 export { furnitureFront, furniturePreview, type FrontPicture, type PreviewItem } from "./preview.ts";
+// fork (fedgar): the editor waits for a pack model before it draws the item's picture
+export { loadModel } from "./models.ts";
 
 export function createViewer(host: HTMLElement, options?: ViewerOptions): FloorplanViewer {
   return new FloorplanViewer(host, options);

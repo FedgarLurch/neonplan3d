@@ -5,7 +5,7 @@
 
 import { Color } from "three";
 import type { Furniture, Vec2 } from "../model.ts";
-import { builtinBase, gangsOf, stairsULayout, POOL_VALVE_Y } from "../model.ts";
+import { builtinBase, gangsOf, growthScale, stairsULayout, POOL_VALVE_Y } from "../model.ts";
 import { isRobotVacuum, mountBase, packItem, packMotion, packMovingPart, packRobotCentre, packRobotPart, packScreen, type PackItem, type PackMotion, type PackPart } from "../packs.ts";
 import { fitParts } from "../pack-scale.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
@@ -1548,6 +1548,8 @@ function builtInScreen(f: Furniture, w: number, d: number, h: number, floor?: Fl
 export function roundFootprint(f: Pick<Furniture, "type">): boolean {
   if (f.type === "table_round" || f.type === "plant") return true;
   const item = packItem(f.type);
+  // fork (fedgar): a growing plant from a local pack stands on a round patch
+  if (item?.growth) return true;
   if (!item?.parts.length) return false;
   const big = item.parts.reduce((m, p) => (p.w * p.d > m.w * m.d ? p : m), item.parts[0]);
   return big.shape === "cyl" && (big.axis ?? "y") === "y" && big.w >= 0.85 && big.d >= 0.85;
@@ -1648,9 +1650,11 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
   const mx = f.mirror ? -1 : 1;
   const tf: Tf = (x, z) => [f.x + mx * x * c - z * s, f.z + mx * x * s + z * c];
   const b = new Builder(buf, lines, tf);
-  const w = Math.max(0.05, f.w);
-  const d = Math.max(0.05, f.d);
-  const h = Math.max(0.005, f.h);
+  // fork (fedgar): a growing plant is drawn at its growth's part of the full size, around its middle
+  const grow = growthScale(f);
+  const w = Math.max(0.05 * grow, f.w * grow);
+  const d = Math.max(0.05 * grow, f.d * grow);
+  const h = Math.max(0.005, f.h * grow);
   switch (f.type) {
     case "sofa":
       sofa(b, w, d, h, Math.max(1, Math.round((w - 0.4) / 0.62)));
@@ -1894,7 +1898,13 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
     }
     default: {
       const item = packItem(f.type);
-      if (item) {
+      if (item?.model) {
+        // fork (fedgar): a local pack's model, a faint box until it is loaded
+        const m = modelMesh(item.model);
+        if (m) b.mesh(m, w, d, h, base, f.model_tone ?? item.tone ?? "neon", item.edges === false || f.model_edges === false ? null : EDGE_FURN);
+        else b.box(-w / 2, w / 2, base, base + h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FAINT);
+        if (base > 0.05) return;
+      } else if (item) {
         // a motorised curtain's fabric or a roll-down screen's cloth is drawn with its cover's state (pushPackMotion);
         // a pack's robot vacuum drives around as the viewer's robot (pushPackRobot), only its dock stays here (#645)
         const motion = packMotion(f.type);
@@ -1905,7 +1915,7 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
       } else b.box(-w / 2, w / 2, 0, h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FURN);
     }
   }
-  contactShadow(shadow, tf, w, d, f.type === "plant" ? 0.35 : 0.5, roundFootprint(f), Math.min(0, base));
+  contactShadow(shadow, tf, w, d, f.type === "plant" || packItem(f.type)?.growth ? 0.35 : 0.5, roundFootprint(f), Math.min(0, base));
 }
 
 /**
@@ -1913,7 +1923,7 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
  * only while bright and strong enough, so these parts are drawn anew on a look change (#609).
  */
 export function hasFixedColors(type: string): boolean {
-  if (type === "custom_model") return true;
+  if (type === "custom_model" || packItem(type)?.model) return true;
   return !!packItem(type)?.parts.some((p) => p.color?.startsWith("#") || p.top?.startsWith("#"));
 }
 
