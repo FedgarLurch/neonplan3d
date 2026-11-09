@@ -1,0 +1,1079 @@
+{
+ "id": "local.garden",
+ "name": "Garden",
+ "publisher": "Edgar fork",
+ "release": 1,
+ "description": "Fruit trees, vegetables and herbs, low-poly. Each plant can be drawn at a growth stage from 1 to 10.",
+ "items": [
+  {
+   "id": "apple_tree",
+   "name": {
+    "en": "Apple tree"
+   },
+   "size": [
+    3.06,
+    2.82,
+    3.69
+   ],
+   "model": "apple_tree.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "fruit tree",
+    "apple",
+    "tree",
+    "orchard",
+    "garden",
+    "plant",
+    "orchard"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "pear_tree",
+   "name": {
+    "en": "Pear tree"
+   },
+   "size": [
+    2.15,
+    2.05,
+    4.37
+   ],
+   "model": "pear_tree.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "fruit tree",
+    "pear",
+    "tree",
+    "orchard",
+    "garden",
+    "plant",
+    "orchard"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "peach_tree",
+   "name": {
+    "en": "Peach tree"
+   },
+   "size": [
+    3.6,
+    3.63,
+    3.29
+   ],
+   "model": "peach_tree.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "fruit tree",
+    "peach",
+    "tree",
+    "orchard",
+    "garden",
+    "plant",
+    "orchard"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "lemon_tree",
+   "name": {
+    "en": "Lemon tree"
+   },
+   "size": [
+    2.39,
+    2.41,
+    2.73
+   ],
+   "model": "lemon_tree.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "fruit tree",
+    "citrus",
+    "lemon",
+    "tree",
+    "garden",
+    "plant",
+    "orchard"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "orange_tree",
+   "name": {
+    "en": "Orange tree"
+   },
+   "size": [
+    2.81,
+    2.54,
+    3.09
+   ],
+   "model": "orange_tree.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "fruit tree",
+    "citrus",
+    "orange",
+    "tree",
+    "garden",
+    "plant",
+    "orchard"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "lettuce",
+   "name": {
+    "en": "Lettuce"
+   },
+   "size": [
+    0.3,
+    0.31,
+    0.13
+   ],
+   "model": "lettuce.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "salad",
+    "leafy greens",
+    "butterhead",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "romaine",
+   "name": {
+    "en": "Romaine lettuce"
+   },
+   "size": [
+    0.28,
+    0.23,
+    0.34
+   ],
+   "model": "romaine.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "salad",
+    "leafy greens",
+    "lettuce",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "cabbage",
+   "name": {
+    "en": "Cabbage"
+   },
+   "size": [
+    0.42,
+    0.48,
+    0.29
+   ],
+   "model": "cabbage.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "brassica",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "broccoli",
+   "name": {
+    "en": "Broccoli"
+   },
+   "size": [
+    0.71,
+    0.63,
+    0.55
+   ],
+   "model": "broccoli.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "brassica",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "cauliflower",
+   "name": {
+    "en": "Cauliflower"
+   },
+   "size": [
+    0.45,
+    0.42,
+    0.27
+   ],
+   "model": "cauliflower.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "brassica",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "kale",
+   "name": {
+    "en": "Kale"
+   },
+   "size": [
+    0.46,
+    0.4,
+    0.45
+   ],
+   "model": "kale.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "brassica",
+    "leafy greens",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "brussels_sprouts",
+   "name": {
+    "en": "Brussels sprouts"
+   },
+   "size": [
+    0.49,
+    0.41,
+    0.73
+   ],
+   "model": "brussels_sprouts.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "brassica",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "potato",
+   "name": {
+    "en": "Potato"
+   },
+   "size": [
+    0.58,
+    0.58,
+    0.51
+   ],
+   "model": "potato.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "root",
+    "tuber",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "tomato",
+   "name": {
+    "en": "Tomato (caged)"
+   },
+   "size": [
+    0.54,
+    0.52,
+    1.37
+   ],
+   "model": "tomato.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "fruiting",
+    "nightshade",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "pepper",
+   "name": {
+    "en": "Pepper"
+   },
+   "size": [
+    0.48,
+    0.46,
+    0.58
+   ],
+   "model": "pepper.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "fruiting",
+    "chili",
+    "bell pepper",
+    "nightshade",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "zucchini",
+   "name": {
+    "en": "Zucchini / squash"
+   },
+   "size": [
+    0.85,
+    0.96,
+    0.39
+   ],
+   "model": "zucchini.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "squash",
+    "cucurbit",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "carrot_row",
+   "name": {
+    "en": "Carrots (1 m row)"
+   },
+   "size": [
+    1.22,
+    0.32,
+    0.16
+   ],
+   "model": "carrot_row.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "root",
+    "row",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "rect",
+     "x": 0,
+     "z": 0,
+     "w": 1,
+     "d": 0.6
+    }
+   ]
+  },
+  {
+   "id": "onion_row",
+   "name": {
+    "en": "Onions (1 m row)"
+   },
+   "size": [
+    1.01,
+    0.11,
+    0.4
+   ],
+   "model": "onion_row.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "allium",
+    "garlic",
+    "row",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "rect",
+     "x": 0,
+     "z": 0,
+     "w": 1,
+     "d": 0.6
+    }
+   ]
+  },
+  {
+   "id": "pole_beans",
+   "name": {
+    "en": "Pole beans"
+   },
+   "size": [
+    0.24,
+    0.24,
+    1.8
+   ],
+   "model": "pole_beans.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "beans",
+    "legume",
+    "climbing",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "corn",
+   "name": {
+    "en": "Corn"
+   },
+   "size": [
+    0.94,
+    0.84,
+    2.0
+   ],
+   "model": "corn.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "vegetable",
+    "maize",
+    "sweet corn",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "strawberry",
+   "name": {
+    "en": "Strawberry"
+   },
+   "size": [
+    0.29,
+    0.26,
+    0.08
+   ],
+   "model": "strawberry.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "fruit",
+    "berry",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "basil",
+   "name": {
+    "en": "Basil"
+   },
+   "size": [
+    0.54,
+    0.51,
+    0.43
+   ],
+   "model": "basil.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "herb",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "rosemary",
+   "name": {
+    "en": "Rosemary"
+   },
+   "size": [
+    0.63,
+    0.69,
+    0.79
+   ],
+   "model": "rosemary.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "herb",
+    "shrub",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "thyme",
+   "name": {
+    "en": "Thyme"
+   },
+   "size": [
+    0.66,
+    0.65,
+    0.16
+   ],
+   "model": "thyme.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "herb",
+    "ground cover",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "mint",
+   "name": {
+    "en": "Mint"
+   },
+   "size": [
+    0.74,
+    0.7,
+    0.27
+   ],
+   "model": "mint.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "herb",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "parsley",
+   "name": {
+    "en": "Parsley"
+   },
+   "size": [
+    0.58,
+    0.53,
+    0.33
+   ],
+   "model": "parsley.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "herb",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "cilantro",
+   "name": {
+    "en": "Cilantro"
+   },
+   "size": [
+    0.3,
+    0.29,
+    0.32
+   ],
+   "model": "cilantro.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "herb",
+    "coriander",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "sage",
+   "name": {
+    "en": "Sage"
+   },
+   "size": [
+    0.86,
+    0.92,
+    0.43
+   ],
+   "model": "sage.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "herb",
+    "shrub",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "oregano",
+   "name": {
+    "en": "Oregano"
+   },
+   "size": [
+    0.73,
+    0.74,
+    0.27
+   ],
+   "model": "oregano.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "herb",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "chives",
+   "name": {
+    "en": "Chives"
+   },
+   "size": [
+    0.14,
+    0.13,
+    0.32
+   ],
+   "model": "chives.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "herb",
+    "allium",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  }
+ ]
+}
