@@ -4889,6 +4889,8 @@ export class Fp3dView3d extends LitElement {
     const hidden = hiddenFurnitureIds(base, states);
     const swap = (f: Furniture): Furniture => {
       if (!f.swap || !swapActive(f, states)) return f;
+      // a custom model shows its other model file in the same box
+      if (f.type === "custom_model") return f.swap.model ? { ...f, model: f.swap.model } : f;
       const alt = packItem(f.swap.type);
       if (!alt) return f;
       // keep the back on the wall: the new depth grows or shrinks from the front

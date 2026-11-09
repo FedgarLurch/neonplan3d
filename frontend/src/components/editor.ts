@@ -158,6 +158,7 @@ import { load3d } from "../load3d.ts";
 import "./library.ts";
 import { basicTypes, buildIndex, familyOf, roomKindOf, type LibraryEntry } from "../library-index.ts";
 import { packsVersion as libPacksVersion } from "../packs.ts";
+import { fitModel, parseGlb } from "../glb.ts";
 import type { WallMode } from "../viewer/viewer3d.ts";
 import { furnitureName } from "../furniture-names.ts";
 import { furnitureSize, getPacks, isElectric, isPackHeater, isPackSensor, isPackType, isRobotVacuum, mountBase, packDisplay, packItem, packItemName, packMotion, packName, packType, setPacks, type FurniturePack } from "../packs.ts";
@@ -11399,7 +11400,7 @@ export class Fp3dEditor extends LitElement {
             >
           </div>`
         : nothing}
-      ${isElectric(f.type) ? this.renderFurnitureLinks(f) : !NO_STATE_TYPES.has(f.type) ? html`<div class="fp3d-form fp3d-links">${this.renderStateLinks(f)}</div>` : nothing} ${GANG_TYPES.has(f.type) ? this.renderGangsForm(f) : nothing} ${TECH_TYPES.has(f.type) ? this.renderTechForm(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing} ${f.type === "waste_bin" || f.type === "mailbox" ? this.renderHouseholdForm(f) : this.renderHouseholdExtras(f)} ${this.renderForkStateForm(f)}
+      ${isElectric(f.type) ? this.renderFurnitureLinks(f) : !NO_STATE_TYPES.has(f.type) ? html`<div class="fp3d-form fp3d-links">${this.renderStateLinks(f)}</div>` : nothing} ${GANG_TYPES.has(f.type) ? this.renderGangsForm(f) : nothing} ${TECH_TYPES.has(f.type) ? this.renderTechForm(f) : nothing} ${f.type === "parking" ? this.renderParkingForm(f) : nothing} ${f.type === "waste_bin" || f.type === "mailbox" ? this.renderHouseholdForm(f) : this.renderHouseholdExtras(f)} ${f.type === "custom_model" ? this.renderCustomModelForm(f) : nothing} ${this.renderForkStateForm(f)}
       ${this.renderModuleFurnitureFields(f)}
       ${f.type.startsWith("pack:mastershort.vehicles:") && this.isAdmin
         ? html`<section>
@@ -12033,6 +12034,118 @@ export class Fp3dEditor extends LitElement {
   }
 
   /** Fork (fedgar): no glow, visibility conditions like a Home Assistant card, and another version of the item by state. */
+  /** Fork (fedgar): the model files in <config>/www/neonplan3d/models (null until fetched). */
+  private _models: { name: string; url: string; size: number }[] | null = null;
+  private _modelBusy: string | null = null;
+  private _modelError: string | null = null;
+
+  private async refreshModels(): Promise<void> {
+    if (!this.hass) return;
+    try {
+      const r = await this.hass.callWS<{ models: { name: string; url: string; size: number }[] }>({ type: "neonplan3d/models/list" });
+      this._models = r.models;
+    } catch (err) {
+      this._models = [];
+      this._modelError = String((err as Error)?.message ?? err);
+    }
+    this.requestUpdate();
+  }
+
+  /** The model's own size (width, depth, height) read from its file. */
+  private async modelSize(url: string): Promise<[number, number, number] | null> {
+    try {
+      const res = await fetch(url, { credentials: "same-origin", cache: "no-cache" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const m = fitModel(parseGlb(await res.arrayBuffer()));
+      this._modelError = null;
+      return m.size;
+    } catch (err) {
+      this._modelError = String((err as Error)?.message ?? err);
+      this.requestUpdate();
+      return null;
+    }
+  }
+
+  private async useModel(url: string, sized: boolean): Promise<void> {
+    if (!sized) return this.updateFurniture({ model: url || null });
+    const size = url ? await this.modelSize(url) : null;
+    const r = (v: number) => Math.max(0.02, Math.round(v * 1000) / 1000);
+    this.updateFurniture(size ? { model: url, w: r(size[0]), d: r(size[1]), h: r(size[2]) } : { model: url || null });
+  }
+
+  private async uploadModel(file: File): Promise<void> {
+    if (!this.hass) return;
+    const name = file.name.replace(/[^A-Za-z0-9_\-. ]/g, "_").replace(/^[^A-Za-z0-9]+/, "");
+    if (!/\.(glb|gltf)$/i.test(name)) {
+      this._modelError = this.t("fork_model_only_glb");
+      return this.requestUpdate();
+    }
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const CHUNK = 768 * 1024;
+    const parts = Math.max(1, Math.ceil(bytes.length / CHUNK));
+    this._modelError = null;
+    try {
+      let url: string | null = null;
+      for (let i = 0; i < parts; i++) {
+        this._modelBusy = `${Math.round((i / parts) * 100)} %`;
+        this.requestUpdate();
+        const slice = bytes.subarray(i * CHUNK, (i + 1) * CHUNK);
+        let bin = "";
+        for (let k = 0; k < slice.length; k += 0x8000) bin += String.fromCharCode(...slice.subarray(k, k + 0x8000));
+        const r = await this.hass.callWS<{ url: string | null }>({ type: "neonplan3d/models/upload", name, index: i, data: btoa(bin), last: i === parts - 1 });
+        url = r.url;
+      }
+      if (url) {
+        await this.refreshModels();
+        await this.useModel(this._models?.find((m) => m.name === name)?.url ?? url, true);
+      }
+    } catch (err) {
+      this._modelError = String((err as Error)?.message ?? err);
+    } finally {
+      this._modelBusy = null;
+      this.requestUpdate();
+    }
+  }
+
+  /** Fork (fedgar): a custom model's file, size, colours and outline. */
+  private renderCustomModelForm(f: Furniture) {
+    const admin = this.isAdmin;
+    if (this._models === null) void this.refreshModels();
+    const list = this._models ?? [];
+    const current = f.model ?? "";
+    const path = (u: string) => u.split("?")[0];
+    const known = !current || list.some((m) => path(m.url) === path(current));
+    return html`<div class="fp3d-form fp3d-links">
+      <div class="fp3d-sub fp3d-wide">${this.t("fork_model")}</div>
+      <label class="fp3d-field fp3d-wide"
+        >${this.t("fork_model_file")}
+        <select ?disabled=${!admin} @change=${(e: Event) => void this.useModel((e.target as HTMLSelectElement).value, true)}>
+          <option value="" ?selected=${!current}>${this.t("fork_swap_none")}</option>
+          ${known ? nothing : html`<option value=${current} selected>${current}</option>`}
+          ${list.map((m) => html`<option value=${m.url} ?selected=${path(m.url) === path(current)}>${m.name} (${Math.max(1, Math.round(m.size / 1024))} KB)</option>`)}
+        </select></label
+      >
+      <label class="fp3d-field fp3d-wide"
+        >${this.t("fork_model_upload")}
+        <input type="file" accept=".glb,.gltf,model/gltf-binary" ?disabled=${!admin || !!this._modelBusy} @change=${(e: Event) => { const input = e.target as HTMLInputElement; const file = input.files?.[0]; if (file) void this.uploadModel(file).then(() => (input.value = "")); }} /></label
+      >
+      ${this._modelBusy ? html`<div class="fp3d-sub fp3d-wide">${this.t("fork_model_uploading")} ${this._modelBusy}</div>` : nothing}
+      ${this._modelError ? html`<div class="fp3d-sub fp3d-wide" style="color: var(--error-color, #ff6b6b)">${this._modelError}</div>` : nothing}
+      ${current ? html`<button class="fp3d-btn fp3d-wide" ?disabled=${!admin} @click=${() => void this.useModel(current, true)}>${this.t("fork_model_size")}</button>` : nothing}
+      <label class="fp3d-field fp3d-wide"
+        >${this.t("fork_model_tone")}
+        <select ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ model_tone: (e.target as HTMLSelectElement).value === "original" ? "original" : null })}>
+          <option value="neon" ?selected=${f.model_tone !== "original"}>${this.t("fork_model_tone_neon")}</option>
+          <option value="original" ?selected=${f.model_tone === "original"}>${this.t("fork_model_tone_original")}</option>
+        </select></label
+      >
+      <label class="fp3d-check fp3d-wide"
+        ><input type="checkbox" .checked=${f.model_edges !== false} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ model_edges: (e.target as HTMLInputElement).checked ? null : false })} />
+        ${this.t("fork_model_edges")}</label
+      >
+    </div>`;
+  }
+
   private renderForkStateForm(f: Furniture) {
     const admin = this.isAdmin;
     const first = f.entity && f.entity !== "none" ? f.entity : f.state_entity && f.state_entity !== "none" ? f.state_entity : "";
@@ -12044,9 +12157,16 @@ export class Fp3dEditor extends LitElement {
           .filter((x) => x.type !== f.type && familyOf(x.i) === fam)
       : [];
     const swap = f.swap ?? null;
+    // a custom model's other version is another model file
+    if (f.type === "custom_model") for (const m of this._models ?? []) if (m.url.split("?")[0] !== (f.model ?? "").split("?")[0]) versions.push({ type: `model:${m.url}`, i: { id: m.url, name: { en: m.name }, size: [1, 1, 1], parts: [] } });
     const saveSwap = (next: Partial<SwapRule> | null) => {
       if (next === null) return this.updateFurniture({ swap: null });
       const r: SwapRule = { type: swap?.type ?? versions[0]?.type ?? "", visibility: swap?.visibility ?? [], ...next };
+      // a custom model keeps its type and swaps the file
+      if (r.type.startsWith("model:")) {
+        r.model = r.type.slice(6);
+        r.type = "custom_model";
+      } else if (r.type !== "custom_model") delete r.model;
       this.updateFurniture({ swap: r.type ? r : null });
     };
     return html`<div class="fp3d-form fp3d-links">
@@ -12076,7 +12196,7 @@ export class Fp3dEditor extends LitElement {
               >${this.t("fork_swap_to")}
               <select ?disabled=${!admin} @change=${(e: Event) => { const v = (e.target as HTMLSelectElement).value; if (v) saveSwap({ type: v }); else saveSwap(null); }}>
                 <option value="" ?selected=${!swap}>${this.t("fork_swap_none")}</option>
-                ${versions.map((x) => html`<option value=${x.type} ?selected=${swap?.type === x.type}>${packItemName(x.i, this.hass?.language ?? "en")}</option>`)}
+                ${versions.map((x) => html`<option value=${x.type} ?selected=${swap?.type === x.type || (!!swap?.model && x.type === `model:${swap.model}`)}>${packItemName(x.i, this.hass?.language ?? "en")}</option>`)}
               </select></label
             >
             ${swap ? this.renderConditionRows(`s-${f.id}`, swap.visibility ?? [], (next) => saveSwap({ visibility: next }), first) : nothing}`
