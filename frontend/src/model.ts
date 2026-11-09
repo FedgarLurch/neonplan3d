@@ -109,6 +109,8 @@ export interface Opening {
   lock?: EntityRef;
   /** Fork (fedgar): false hides the lock's pin at the door (tapping the door still offers to lock or unlock). */
   lock_pin?: boolean | null;
+  /** Fork (fedgar): one tap on the door locks or unlocks it straight away (no menu, no question); a long press opens the menu. */
+  lock_tap?: boolean | null;
   /** Windows: which sensors report the sash (null: a contact, plus a tilt sensor when one is set). */
   sensor?: "contact" | "handle" | "contact_tilt" | null;
   /** The same for the second leaf of a double window, with its own tilt sensor. */
