@@ -103,6 +103,8 @@ export interface Opening {
   sidelight_width2?: number | null;
   /** Contact of the second leaf (null = none). */
   contact2: string | null;
+  /** Fork (fedgar): the blind hangs inside, on the room side of the window, instead of outside. */
+  cover_inside?: boolean | null;
   /** Door: its smart lock (lock.*) – shown as a pin at the door, locked or not (D636). */
   lock?: EntityRef;
   /** Fork (fedgar): false hides the lock's pin at the door (tapping the door still offers to lock or unlock). */
@@ -212,6 +214,32 @@ export function furnitureHidden(f: Pick<Furniture, "visibility" | "hide_when">, 
   return conds.length > 0 && !conds.every((c) => conditionMet(c, states));
 }
 
+/** Fork (fedgar): shown as another version of the item (a pack variant of the same family) while all conditions are met. */
+export interface SwapRule {
+  type: string;
+  visibility: VisibilityCondition[];
+}
+
+/** Fork (fedgar): is the item shown as its other version right now? */
+export function swapActive(f: Pick<Furniture, "swap">, states: Record<string, { state: string } | undefined>): boolean {
+  const r = f.swap;
+  if (!r || !r.type || !Array.isArray(r.visibility)) return false;
+  const conds = r.visibility.filter((c) => c && c.entity);
+  return conds.length > 0 && conds.every((c) => conditionMet(c, states));
+}
+
+/** Fork (fedgar): a key that changes whenever an item hides, shows or swaps its version. */
+export function stateRulesKey(b: { floors: { furniture: Furniture[] }[] }, states: Record<string, { state: string } | undefined>): string {
+  const hidden: string[] = [];
+  const swapped: string[] = [];
+  for (const fl of b.floors)
+    for (const f of fl.furniture) {
+      if (furnitureHidden(f, states)) hidden.push(f.id);
+      else if (swapActive(f, states)) swapped.push(f.id);
+    }
+  return hidden.sort().join(",") + "|" + swapped.sort().join(",");
+}
+
 /** Fork (fedgar): ids of every item hidden right now, across the floors. */
 export function hiddenFurnitureIds(b: { floors: { furniture: Furniture[] }[] }, states: Record<string, { state: string } | undefined>): Set<string> {
   const out = new Set<string>();
@@ -251,6 +279,8 @@ export interface Furniture {
   hide_when?: HideRule | null;
   /** Fork (fedgar): shown in 3D only while all conditions are met, like a card's visibility in Home Assistant. */
   visibility?: VisibilityCondition[] | null;
+  /** Fork (fedgar): shown as another version while its conditions are met (a wall bed open or closed). */
+  swap?: SwapRule | null;
   /**
    * Lamps: glow only while the light shows this colour ("#rrggbb", similar shades count) – a colour light used as a
    * signal (yellow: water) does not show its other colours here. Null: every colour.

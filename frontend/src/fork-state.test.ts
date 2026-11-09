@@ -37,3 +37,14 @@ test("fork: the legacy hide_when rule reads as a condition", () => {
   const b = { floors: [{ furniture: [{ id: "a", hide_when: { entity: "s.a", states: ["off"] } }, { id: "b" }] as Furniture[] }] };
   assert.deepEqual([...hiddenFurnitureIds(b, { "s.a": st("off") })], ["a"]);
 });
+
+test("fork: a swap shows the other version only while all its conditions are met", async () => {
+  const { swapActive, stateRulesKey } = await import("./model.ts");
+  const f = { swap: { type: "pack:x:bed_closed", visibility: [{ condition: "state" as const, entity: "input_boolean.bed_down", state: "off" }] } };
+  assert.equal(swapActive(f, { "input_boolean.bed_down": st("off") }), true);
+  assert.equal(swapActive(f, { "input_boolean.bed_down": st("on") }), false);
+  assert.equal(swapActive({ swap: { type: "pack:x:y", visibility: [] } }, {}), false);
+  const b = { floors: [{ furniture: [{ id: "a", ...f }, { id: "h", visibility: [{ condition: "state" as const, entity: "s.h", state: "on" }] }] as Furniture[] }] };
+  assert.equal(stateRulesKey(b, { "input_boolean.bed_down": st("off"), "s.h": st("off") }), "h|a");
+  assert.equal(stateRulesKey(b, { "input_boolean.bed_down": st("on"), "s.h": st("on") }), "|");
+});
