@@ -5524,7 +5524,12 @@ export class Fp3dView3d extends LitElement {
     if (!e || !this.hass) return;
     if (e.lock && !e.cover) {
       if (this.ro) this.showInfo(e.lock, x, y);
-      else this._menu = { entity: e.lock, x, y, doorLock: true };
+      else if (!hold && this.building?.floors.some((f) => f.openings.some((o) => o.id === openingId && o.lock_tap === true))) {
+        // fork (fedgar): one tap locks or unlocks, no menu and no question; a long press still opens the menu
+        const st = this.hass.states[e.lock];
+        if (!st || isUnavailable(st)) openMoreInfo(this, e.lock);
+        else void this.hass.callService("lock", st.state === "locked" ? "unlock" : "lock", { entity_id: e.lock });
+      } else this._menu = { entity: e.lock, x, y, doorLock: true };
       return;
     }
     const drive = e.cover;

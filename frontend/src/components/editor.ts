@@ -11257,6 +11257,10 @@ export class Fp3dEditor extends LitElement {
                     ? html`<label class="fp3d-check fp3d-wide"
                         ><input type="checkbox" .checked=${o.lock_pin !== false} ?disabled=${!admin} @change=${(ev: Event) => this.updateOpening({ lock_pin: (ev.target as HTMLInputElement).checked ? null : false })} />
                         ${this.t("fork_lock_pin")}</label
+                      >
+                      <label class="fp3d-check fp3d-wide"
+                        ><input type="checkbox" .checked=${o.lock_tap === true} ?disabled=${!admin} @change=${(ev: Event) => this.updateOpening({ lock_tap: (ev.target as HTMLInputElement).checked || null })} />
+                        ${this.t("fork_lock_tap")}</label
                       >`
                     : nothing}
                   <p class="fp3d-sub fp3d-wide">${this.t("door_lock_hint")}</p>`
