@@ -12169,7 +12169,16 @@ export class Fp3dEditor extends LitElement {
       } else if (r.type !== "custom_model") delete r.model;
       this.updateFurniture({ swap: r.type ? r : null });
     };
+    const grows = !!packItem(f.type)?.growth || f.type === "plant";
     return html`<div class="fp3d-form fp3d-links">
+      ${grows
+        ? html`<label class="fp3d-field fp3d-wide"
+            >${this.t("fork_growth")}
+            <select ?disabled=${!admin} @change=${(e: Event) => { const v = Number((e.target as HTMLSelectElement).value); this.updateFurniture({ growth: v >= 10 ? null : v }); }}>
+              ${[10, 9, 8, 7, 6, 5, 4, 3, 2, 1].map((g) => html`<option value=${g} ?selected=${(f.growth ?? 10) === g}>${g === 10 ? this.t("fork_growth_full") : `${g} (${g * 10} %)`}</option>`)}
+            </select></label
+          >`
+        : nothing}
       <label class="fp3d-check fp3d-wide"
         ><input type="checkbox" .checked=${!!f.glow_off} ?disabled=${!admin} @change=${(e: Event) => this.updateFurniture({ glow_off: (e.target as HTMLInputElement).checked || undefined })} />
         ${this.t("fork_glow_off")}</label
@@ -13017,6 +13026,8 @@ export class Fp3dEditor extends LitElement {
   private libraryThumb = async (entry: LibraryEntry): Promise<string | null> => {
     const mod = await load3d();
     const [w, d, h] = entry.size;
+    const model = packItem(entry.type)?.model;
+    if (model) await mod.loadModel(model).catch(() => null);
     return mod.furniturePreview({ type: entry.type, w, d, h, variant: null, lamp: LAMP_MODEL[entry.type] ?? null }, 96, this.packs ?? []);
   };
 
@@ -13055,6 +13066,8 @@ export class Fp3dEditor extends LitElement {
     try {
       const mod = await load3d();
       const [w, d, h] = furnitureSize(type);
+      const model = packItem(type)?.model;
+      if (model) await mod.loadModel(model).catch(() => null);
       const url = mod.furniturePreview({ type, w, d, h, variant: null, lamp: LAMP_MODEL[type] ?? null }, 180, this.packs ?? []);
       if (this._preview?.type === type) this._preview = { type, url, ...place };
     } catch {
