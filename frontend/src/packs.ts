@@ -83,6 +83,14 @@ export interface PackItem {
   /** Variants of one thing (a table in three lengths) share a family; the variant names the chip, by language. */
   family?: string;
   variant?: Record<string, string>;
+  /** Fork (fedgar): local packs draw a .glb model (its URL) instead of parts. */
+  model?: string;
+  /** Fork (fedgar): the model's colours pulled into the neon look, or kept as they are. */
+  tone?: "neon" | "original";
+  /** Fork (fedgar): draw the model's outline (default true). */
+  edges?: boolean;
+  /** Fork (fedgar): a plant that grows: the item's growth (1 to 10) draws it at that part of its full size. */
+  growth?: boolean;
 }
 
 export interface FurniturePack {

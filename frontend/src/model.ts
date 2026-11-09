@@ -240,6 +240,13 @@ export interface SwapRule {
   visibility: VisibilityCondition[];
 }
 
+/** Fork (fedgar): the part of its full size a growing plant is drawn at (growth 1 to 10, unset = 1). */
+export function growthScale(f: Pick<Furniture, "growth">): number {
+  const g = f.growth;
+  if (g === null || g === undefined || !Number.isFinite(g)) return 1;
+  return Math.min(10, Math.max(1, g)) / 10;
+}
+
 /** Fork (fedgar): is the item shown as its other version right now? */
 export function swapActive(f: Pick<Furniture, "swap">, states: Record<string, { state: string } | undefined>): boolean {
   const r = f.swap;
@@ -301,6 +308,8 @@ export interface Furniture {
   visibility?: VisibilityCondition[] | null;
   /** Fork (fedgar): shown as another version while its conditions are met (a wall bed open or closed). */
   swap?: SwapRule | null;
+  /** Fork (fedgar): a plant's growth from 1 to 10, drawn at that part of its full size (3 = 30 %); unset = full size. */
+  growth?: number | null;
   /** Fork (fedgar): custom model: the .glb file (a URL such as /local/neonplan3d/models/chair.glb). */
   model?: string | null;
   /** Fork (fedgar): custom model colours pulled into the neon look (default) or kept as they are. */
