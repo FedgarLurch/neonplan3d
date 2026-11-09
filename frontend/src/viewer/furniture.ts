@@ -11,6 +11,8 @@ import { fitParts } from "../pack-scale.ts";
 import { binColors, binShape, householdCountry, mailboxShape, type BinShape, type MailboxShape } from "../household.ts";
 import type { Floor } from "../model.ts";
 import { ALWAYS, DEG, EDGE_TOP, GeoBuffer, LineBuffer, pushLoft, pushLyingCyl, pushPrism, shade } from "./geo.ts";
+import type { ModelMesh } from "../glb.ts";
+import { modelMesh } from "./models.ts";
 
 const C = {
   body: 0x172238,
@@ -133,6 +135,50 @@ class Builder {
   }
 
   /** Line between two local points at heights ya and yb. */
+  /**
+   * fork (fedgar): a custom model (unit box, see glb.ts) stretched to w × h × d, standing at y0. Faces are shaded by
+   * the way they point (lit from above, darker underneath) since the plan has no lights of its own for furniture.
+   * `tone` "neon" pulls the model's colours into the dark look, "original" keeps them.
+   */
+  mesh(m: ModelMesh, w: number, d: number, h: number, y0: number, tone: "neon" | "original", edges: Color | null): void {
+    const P = m.pos;
+    const body = new Color(C.body);
+    const pt = (i: number): number[] => {
+      const [x, z] = this.tf(P[i * 3] * w, P[i * 3 + 2] * d);
+      return [x, y0 + P[i * 3 + 1] * h, z];
+    };
+    const ca = new Color();
+    const cb = new Color();
+    const cc = new Color();
+    const tint = (out: Color, i: number, k: number): Color => {
+      const r = m.col[i * 3];
+      const g = m.col[i * 3 + 1];
+      const b = m.col[i * 3 + 2];
+      if (tone === "original") return out.setRGB(Math.min(1, r * 0.85 * k), Math.min(1, g * 0.85 * k), Math.min(1, b * 0.85 * k));
+      return out.setRGB(Math.min(1, (body.r + r * 0.3) * k), Math.min(1, (body.g + g * 0.3) * k), Math.min(1, (body.b + b * 0.3) * k));
+    };
+    for (let t = 0; t < m.tris; t++) {
+      const a = pt(t * 3);
+      let b = pt(t * 3 + 1);
+      let c = pt(t * 3 + 2);
+      if (this.mirrored) [b, c] = [c, b];
+      const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+      const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+      const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
+      const l = Math.hypot(nx, ny, nz) || 1;
+      const up = ny / l;
+      const side = (nx / l) * 0.55 - (nz / l) * 0.45;
+      const k = 0.66 + 0.34 * Math.max(0, up) - 0.28 * Math.max(0, -up) + 0.1 * side;
+      const [i0, i1, i2] = this.mirrored ? [t * 3, t * 3 + 2, t * 3 + 1] : [t * 3, t * 3 + 1, t * 3 + 2];
+      this.buf.tri(a, b, c, tint(ca, i0, k), tint(cb, i1, k), tint(cc, i2, k));
+    }
+    if (!edges) return;
+    const E = m.edges;
+    for (let i = 0; i < E.length; i += 6) {
+      this.line(this.tf(E[i] * w, E[i + 2] * d), this.tf(E[i + 3] * w, E[i + 5] * d), y0 + E[i + 1] * h, y0 + E[i + 4] * h, edges);
+    }
+  }
+
   seg(xa: number, ya: number, za: number, xb: number, yb: number, zb: number, color: Color = EDGE_FURN): void {
     this.line(this.tf(xa, za), this.tf(xb, zb), ya, yb, color);
   }
@@ -1838,6 +1884,14 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
       homeBattery(b, w, d, h, f.variant ?? null);
       if (f.variant === "wall") return;
       break;
+    case "custom_model": {
+      // fork (fedgar): the item's own .glb, a faint box until it is loaded (or when it fails)
+      const m = modelMesh(f.model);
+      if (m) b.mesh(m, w, d, h, base, f.model_tone === "original" ? "original" : "neon", f.model_edges === false ? null : EDGE_FURN);
+      else b.box(-w / 2, w / 2, base, base + h, -d / 2, d / 2, C.body, C.bodyTop, EDGE_FAINT);
+      if (base > 0.05) return;
+      break;
+    }
     default: {
       const item = packItem(f.type);
       if (item) {
@@ -1859,6 +1913,7 @@ function buildFurniture(buf: GeoBuffer, lines: LineBuffer, shadow: GeoBuffer, f:
  * only while bright and strong enough, so these parts are drawn anew on a look change (#609).
  */
 export function hasFixedColors(type: string): boolean {
+  if (type === "custom_model") return true;
   return !!packItem(type)?.parts.some((p) => p.color?.startsWith("#") || p.top?.startsWith("#"));
 }
 

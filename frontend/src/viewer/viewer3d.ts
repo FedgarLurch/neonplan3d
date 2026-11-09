@@ -56,6 +56,7 @@ import { buildFloorGeometry, SLAB, stairHoleParts, type FloorGeometry } from "./
 import { OrbitControls, type OrbitView } from "./controls.ts";
 import { makeFoldable, type FoldMasks } from "./fold.ts";
 import { CameraProjections, PROJECTION_LAYER, type ProjectionSurface, type ProjectorPose } from "./projection.ts";
+import { onModelReady } from "./models.ts";
 import { packGlowCentre, pushAwning, pushCameraModel, pushPackGlow, pushPackRobot, pushPackLamp, pushPackMotion, screenRect, screenPictureSize, pushFridgeDoors, setLightLook, hasFixedColors } from "./furniture.ts";
 import { pushPipeTube, type PipeTube } from "./pipes.ts";
 import { pushGate } from "./outdoor.ts";
@@ -771,7 +772,15 @@ export class FloorplanViewer {
   private fpsStart = 0;
   private gpuName: string | null | undefined;
 
+  private offModels: () => void;
+
   constructor(host: HTMLElement, options: ViewerOptions = {}) {
+    // fork (fedgar): a custom model that arrived after the plan was built is drawn in on a rebuild
+    this.offModels = onModelReady(() => {
+      if (!this.building) return;
+      this.rebuild();
+      this.invalidate();
+    });
     this.host = host;
     this.options = options;
     this.explode = options.explode ?? true;
@@ -2088,6 +2097,7 @@ export class FloorplanViewer {
   }
 
   dispose(): void {
+    this.offModels();
     this.projections.dispose();
     this.disposed = true;
     cancelAnimationFrame(this.frame);
