@@ -214,6 +214,22 @@ export function furnitureHidden(f: Pick<Furniture, "visibility" | "hide_when">, 
   return conds.length > 0 && !conds.every((c) => conditionMet(c, states));
 }
 
+/** Fork (fedgar): the item glows in its own colour while all conditions are met (no conditions: always), no light needed. */
+export interface GlowRule {
+  color: string;
+  conditions: VisibilityCondition[];
+}
+
+/** Fork (fedgar): the glow of a glow rule right now (null: none, or no rule). */
+export function ruleGlow(f: Pick<Furniture, "glow_when">, states: Record<string, { state: string } | undefined>): { color: [number, number, number]; level: number } | null {
+  const r = f.glow_when;
+  if (!r || !/^#[0-9a-f]{6}$/i.test(r.color ?? "")) return null;
+  const conds = (r.conditions ?? []).filter((c) => c && c.entity);
+  if (!conds.every((c) => conditionMet(c, states))) return null;
+  const n = parseInt(r.color.slice(1), 16);
+  return { color: [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255], level: 1 };
+}
+
 /** Fork (fedgar): shown as another version of the item (a pack variant of the same family) while all conditions are met. */
 export interface SwapRule {
   type: string;
@@ -281,6 +297,8 @@ export interface Furniture {
   visibility?: VisibilityCondition[] | null;
   /** Fork (fedgar): shown as another version while its conditions are met (a wall bed open or closed). */
   swap?: SwapRule | null;
+  /** Fork (fedgar): glows in its own colour by conditions, without a light (a lock bar green while locked). */
+  glow_when?: GlowRule | null;
   /**
    * Lamps: glow only while the light shows this colour ("#rrggbb", similar shades count) – a colour light used as a
    * signal (yellow: water) does not show its other colours here. Null: every colour.

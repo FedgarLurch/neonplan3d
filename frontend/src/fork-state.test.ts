@@ -48,3 +48,12 @@ test("fork: a swap shows the other version only while all its conditions are met
   assert.equal(stateRulesKey(b, { "input_boolean.bed_down": st("off"), "s.h": st("off") }), "h|a");
   assert.equal(stateRulesKey(b, { "input_boolean.bed_down": st("on"), "s.h": st("on") }), "|");
 });
+
+test("fork: a glow rule lights in its own colour while its conditions are met", async () => {
+  const { ruleGlow } = await import("./model.ts");
+  const f = { glow_when: { color: "#00ff55", conditions: [{ condition: "state" as const, entity: "lock.front_door", state: "locked" }] } };
+  assert.deepEqual(ruleGlow(f, { "lock.front_door": st("locked") }), { color: [0, 1, 85 / 255], level: 1 });
+  assert.equal(ruleGlow(f, { "lock.front_door": st("unlocked") }), null);
+  assert.notEqual(ruleGlow({ glow_when: { color: "#ffffff", conditions: [] } }, {}), null);
+  assert.equal(ruleGlow({ glow_when: { color: "green", conditions: [] } }, {}), null);
+});
