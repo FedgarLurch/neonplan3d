@@ -119,8 +119,34 @@ async def ws_save_building(
     """Replace the building."""
     if (data := _data(hass, connection, msg)) is None:
         return
+    # fork (fedgar): Garden pack plants become plantings in HA Homestead (ids written into the plan)
+    try:
+        from .garden import async_sync_garden
+
+        await async_sync_garden(hass, data.building or {}, msg["building"], await _garden_names(hass))
+    except Exception:  # the plan is saved whatever happens to the garden
+        import logging
+
+        logging.getLogger(__name__).exception("NeonPlan 3D: garden sync failed")
     revision = await data.async_save_building(msg["building"])
     connection.send_result(msg["id"], {"revision": revision})
+
+
+async def _garden_names(hass: HomeAssistant) -> dict[str, str]:
+    """Garden pack item id -> its English name."""
+    from pathlib import Path
+
+    from .const import URL_BASE
+    from .packs import load_local_packs
+
+    folder = [(Path(__file__).parent / "frontend" / "packs", f"{URL_BASE}/packs")]
+    packs = await hass.async_add_executor_job(load_local_packs, folder)
+    return {
+        item["id"]: (item["name"].get("en") if isinstance(item["name"], dict) else item["name"]) or item["id"]
+        for pack in packs
+        if pack["id"] == "local.garden"
+        for item in pack["items"]
+    }
 
 
 @websocket_api.websocket_command({vol.Required("type"): "neonplan3d/building/subscribe"})
