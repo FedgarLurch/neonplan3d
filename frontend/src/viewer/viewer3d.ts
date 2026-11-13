@@ -129,6 +129,8 @@ export interface ViewerOptions {
   onFurnitureMove?: (furnitureId: string, x: number, z: number) => void;
   /** Fork (fedgar): tap on a furniture item outside furnishing; true when the item took the tap (a plant's card). */
   onFurnitureTap?: (furnitureId: string, x: number, y: number) => boolean;
+  /** Fork (fedgar): a tap on a room or outdoor area, with the plan point under it; true = handled (a garden bed opens its card). */
+  onZoneTap?: (floorId: string, roomId: string, x: number, z: number) => boolean;
   onStats?: (stats: ViewerStats) => void;
   /** Text for the floor labels in the house view, e.g. "5 rooms". */
   floorInfo?: (floor: Floor) => string;
@@ -4267,6 +4269,12 @@ export class FloorplanViewer {
     if (!this.furnish && this.options.onFurnitureTap) {
       const item = this.furnitureAt(x, y);
       if (item && this.options.onFurnitureTap(item.id, x, y)) return;
+    }
+    // fork (fedgar): a garden bed opens its own card (with the point tapped, where a new plant goes)
+    if (!this.furnish && hit && "roomId" in hit && hit.roomId && this.options.onZoneTap) {
+      const fv = this.activeFloors().find((f) => f.floor.id === hit.floorId);
+      const p = fv && this.floorPoint(fv, x, y);
+      if (p && this.options.onZoneTap(hit.floorId, hit.roomId, p[0], p[1])) return;
     }
     this.options.onRoomTap?.(hit?.floorId ?? this.floorId ?? "", hit?.roomId ?? null);
   }
