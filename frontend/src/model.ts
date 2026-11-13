@@ -314,6 +314,8 @@ export interface Furniture {
   planting_id?: string | null;
   /** Fork (fedgar): the day the planting was made from the plan. */
   planting_on?: string | null;
+  /** Fork (fedgar): the variety typed when the plant was added from a bed's card (goes on the new planting). */
+  plant_variety?: string | null;
   /** Fork (fedgar): custom model: the .glb file (a URL such as /local/neonplan3d/models/chair.glb). */
   model?: string | null;
   /** Fork (fedgar): custom model colours pulled into the neon look (default) or kept as they are. */

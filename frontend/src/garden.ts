@@ -4,9 +4,10 @@
  * Homestead (a separate integration) keeps the beds ("zones", each linked to an HA area and a valve), the plantings
  * and the diary. The plan's Garden pack plants carry the planting's id (the integration writes it when the plan is
  * saved). Here: plants drawn at today's growth stage and hidden once they are gone, the beds whose valve runs glow
- * in the valve's colour, and the card a tapped plant opens.
+ * in the valve's colour, the card a tapped plant opens, and the card of a tapped bed (its plants, adding one).
  */
-import type { Building, Furniture, Vec2 } from "./model.ts";
+import { type Building, type Furniture, pointInPolygon, type Vec2 } from "./model.ts";
+import type { FurniturePack } from "./packs.ts";
 import type { HomeAssistant } from "./types.ts";
 
 export interface GardenZone {
@@ -15,6 +16,7 @@ export interface GardenZone {
   area_id?: string | null;
   valve_entity?: string | null;
   hose_here?: boolean;
+  watering?: string | null;
 }
 
 export interface GardenPlanting {
@@ -218,4 +220,167 @@ export function ago(day: string | null, now = new Date()): string {
   if (n === 1) return "yesterday";
   if (n < 8) return `${n} days ago`;
   return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+
+// ------------------------------------------------------------------ beds and adding plants
+
+export const GARDEN_PACK = "local.garden";
+
+export interface GardenChoice {
+  /** Furniture type of the item. */
+  type: string;
+  name: string;
+  group: "Trees" | "Vegetables" | "Herbs" | "Other";
+  /** Other plant, Flowers: the plant is called what is typed. */
+  generic: boolean;
+  /** Lower-case words it is found by. */
+  words: string;
+  size: [number, number, number];
+}
+
+/** The Garden pack's plants, to choose from (trees, vegetables, herbs, then the generic ones). */
+export function gardenChoices(packs: readonly FurniturePack[], language = "en"): GardenChoice[] {
+  const pack = packs.find((p) => p.id === GARDEN_PACK);
+  if (!pack) return [];
+  const lang = language.split("-")[0];
+  const order = ["Trees", "Vegetables", "Herbs", "Other"];
+  return pack.items
+    .map((it) => {
+      const tags = it.tags ?? [];
+      const generic = tags.includes("generic");
+      const group: GardenChoice["group"] = generic ? "Other" : tags.includes("tree") ? "Trees" : tags.includes("herb") ? "Herbs" : "Vegetables";
+      const name = it.name[lang] ?? it.name.en ?? it.id;
+      return { type: `pack:${GARDEN_PACK}:${it.id}`, name, group, generic, words: [name, ...tags].join(" ").toLowerCase(), size: it.size };
+    })
+    .sort((a, b) => order.indexOf(a.group) - order.indexOf(b.group) || (a.generic ? 0 : a.name.localeCompare(b.name)));
+}
+
+/** The choices matching what is typed (all when nothing is); the generic ones always stay at the end. */
+export function findChoices(choices: GardenChoice[], query: string): GardenChoice[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return choices;
+  return choices.filter((c) => c.generic || q.split(/\s+/).every((w) => c.words.includes(w)));
+}
+
+export interface Bed {
+  floorId: string;
+  /** The outdoor area drawn in the plan. */
+  areaId: string;
+  points: Vec2[];
+  zone: GardenZone;
+}
+
+/** The garden bed an outdoor area of the plan is: linked to an HA area that is a Homestead zone. */
+export function bedOf(b: Building, garden: GardenData | null, floorId: string, outdoorId: string): Bed | null {
+  if (!garden) return null;
+  const floor = b.floors.find((f) => f.id === floorId);
+  const area = floor?.outdoor?.find((o) => o.id === outdoorId);
+  if (!floor || !area?.area_id || area.points.length < 3) return null;
+  const zone = Object.values(garden.zones).find((z) => z.area_id === area.area_id);
+  return zone ? { floorId, areaId: area.id, points: area.points, zone } : null;
+}
+
+/** Every bed of the plan (for moving a plant), in bed order ("Bed 2" before "Bed 10"). */
+export function bedsOf(b: Building, garden: GardenData | null): Bed[] {
+  const out: Bed[] = [];
+  for (const floor of b.floors) for (const o of floor.outdoor ?? []) {
+    const bed = bedOf(b, garden, floor.id, o.id);
+    if (bed && !out.some((x) => x.zone.id === bed.zone.id)) out.push(bed);
+  }
+  return out.sort((a, c) => a.zone.name.localeCompare(c.zone.name, undefined, { numeric: true }));
+}
+
+/** The plants growing in a bed, by name. */
+export function bedPlantings(garden: GardenData, zoneId: string): GardenPlanting[] {
+  return Object.values(garden.plantings)
+    .filter((p) => p.zone_id === zoneId && alive(p))
+    .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+}
+
+/** A planting made today with nothing in its diary yet: removing it leaves no trace (placed by mistake). */
+export function placedToday(garden: GardenData, plantingId: string, f: Pick<Furniture, "planting_on"> | undefined, today: string): boolean {
+  return !!f && f.planting_on === today && !Object.values(garden.events).some((e) => e.planting_id === plantingId);
+}
+
+/**
+ * Where a new plant goes in a bed: the point wanted if it is inside and clear of the other plants, else the nearest
+ * clear point around it, else the point of the bed farthest from the others. `taken` are the plants there (x, z, radius).
+ */
+export function freeSpot(points: Vec2[], taken: [number, number, number][], radius: number, want: Vec2 | null): Vec2 {
+  const xs = points.map((p) => p[0]);
+  const zs = points.map((p) => p[1]);
+  const centre: Vec2 = [xs.reduce((a, b) => a + b, 0) / xs.length, zs.reduce((a, b) => a + b, 0) / zs.length];
+  const start = want && pointInPolygon(want, points) ? want : centre;
+  const room = (p: Vec2) => Math.min(Infinity, ...taken.map(([x, z, r]) => Math.hypot(p[0] - x, p[1] - z) - r));
+  const clear = (p: Vec2) => pointInPolygon(p, points) && room(p) >= radius;
+  if (clear(start)) return round2(start);
+  const step = Math.max(0.1, radius / 2);
+  const reach = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...zs) - Math.min(...zs));
+  for (let d = step; d <= reach; d += step) {
+    const n = Math.max(8, Math.round((2 * Math.PI * d) / step));
+    for (let i = 0; i < n; i++) {
+      const a = (i / n) * 2 * Math.PI;
+      const p: Vec2 = [start[0] + Math.cos(a) * d, start[1] + Math.sin(a) * d];
+      if (clear(p)) return round2(p);
+    }
+  }
+  // a full bed: the most room left
+  let best: Vec2 = start;
+  let most = room(start);
+  for (let x = Math.min(...xs); x <= Math.max(...xs); x += step) {
+    for (let z = Math.min(...zs); z <= Math.max(...zs); z += step) {
+      const r = room([x, z]);
+      if (r > most && pointInPolygon([x, z], points)) [best, most] = [[x, z], r];
+    }
+  }
+  return round2(best);
+}
+
+function round2(p: Vec2): Vec2 {
+  return [Math.round(p[0] * 100) / 100, Math.round(p[1] * 100) / 100];
+}
+
+/** The plants of the plan standing in a bed, as (x, z, radius at full size). */
+export function plantsIn(list: Furniture[], points: Vec2[]): [number, number, number][] {
+  return list
+    .filter((f) => f.type.startsWith(`pack:${GARDEN_PACK}:`) && pointInPolygon([f.x, f.z], points))
+    .map((f) => [f.x, f.z, Math.max(f.w, f.d) / 2]);
+}
+
+export interface NewPlant {
+  choice: GardenChoice;
+  /** The name typed (generic items), the variety typed. */
+  name?: string;
+  variety?: string;
+  /** 1 = seed today, 2 to 9 = transplant at that size, 10 = already there. */
+  growth: number;
+}
+
+/** The plan item of a plant added from a bed's card. */
+export function newPlantItem(id: string, plant: NewPlant, at: Vec2): Furniture {
+  const [w, d, h] = plant.choice.size;
+  const name = plant.choice.generic ? plant.name?.trim() : "";
+  const variety = plant.variety?.trim();
+  return {
+    id,
+    type: plant.choice.type,
+    x: at[0],
+    z: at[1],
+    // a little turn each, so a row of the same plant does not look stamped
+    rotation: Math.round(Math.random() * 360),
+    w,
+    d,
+    h,
+    variant: null,
+    growth: plant.growth >= 10 ? null : Math.max(1, Math.round(plant.growth)),
+    ...(name ? { name } : {}),
+    ...(variety ? { plant_variety: variety } : {}),
+  };
+}
+
+/** How a bed is watered, in a few words ("Drip · Front Yard Water Valve"). */
+export function bedWatering(zone: GardenZone, valveName: string | null): string {
+  const how: Record<string, string> = { none: "", can: "Watering can", hose: "Hose", drip: "Drip", overhead: "Sprinklers", valve: "Valve" };
+  const parts = [how[zone.watering ?? ""] ?? zone.watering ?? "", valveName ?? ""].filter(Boolean);
+  return parts.join(" · ");
 }

@@ -81,3 +81,64 @@ test("ago", () => {
   assert.equal(ago("2026-11-12", now), "yesterday");
   assert.equal(ago("2026-11-10", now), "3 days ago");
 });
+
+test("the Garden pack's plants to choose from, found by name or kind", async () => {
+  const { gardenChoices, findChoices } = await import("./garden.ts");
+  const item = (id: string, name: string, tags: string[]) => ({ id, name: { en: name }, size: [0.4, 0.4, 0.3] as [number, number, number], parts: [], tags });
+  const packs = [
+    {
+      id: "local.garden",
+      name: "Garden",
+      publisher: "",
+      licensee: null,
+      items: [
+        item("basil", "Basil", ["herb"]),
+        item("plant", "Other plant", ["generic"]),
+        item("pear_tree", "Pear tree", ["fruit tree", "tree"]),
+        item("tomato", "Tomato (caged)", ["vegetable", "nightshade"]),
+      ],
+    },
+  ] as never;
+  const all = gardenChoices(packs);
+  assert.deepEqual(
+    all.map((c) => [c.name, c.group]),
+    [["Pear tree", "Trees"], ["Tomato (caged)", "Vegetables"], ["Basil", "Herbs"], ["Other plant", "Other"]],
+  );
+  assert.deepEqual(
+    findChoices(all, "night").map((c) => c.name),
+    ["Tomato (caged)", "Other plant"],
+  );
+  assert.equal(findChoices(all, "").length, 4);
+});
+
+test("a new plant goes where the bed was tapped, else the nearest clear spot inside", async () => {
+  const { freeSpot, newPlantItem } = await import("./garden.ts");
+  const bed: [number, number][] = [[0, 0], [2, 0], [2, 1], [0, 1]];
+  assert.deepEqual(freeSpot(bed, [], 0.2, [0.5, 0.5]), [0.5, 0.5]);
+  // tapped outside (the raised bed's side): the middle
+  assert.deepEqual(freeSpot(bed, [], 0.2, [5, 5]), [1, 0.5]);
+  // a plant already there: moved clear of it, still inside
+  const p = freeSpot(bed, [[0.5, 0.5, 0.2]], 0.2, [0.5, 0.5]);
+  assert.ok(Math.hypot(p[0] - 0.5, p[1] - 0.5) >= 0.4 - 1e-9);
+  assert.ok(p[0] > 0 && p[0] < 2 && p[1] > 0 && p[1] < 1);
+  const choice = { type: "pack:local.garden:plant", name: "Other plant", group: "Other", generic: true, words: "", size: [0.8, 0.8, 0.6] } as const;
+  const f = newPlantItem("f1", { choice: { ...choice, size: [0.8, 0.8, 0.6] }, name: " Lavender ", variety: "Hidcote", growth: 3 }, [1, 0.5]);
+  assert.equal(f.name, "Lavender");
+  assert.equal(f.plant_variety, "Hidcote");
+  assert.equal(f.growth, 3);
+  assert.equal(newPlantItem("f2", { choice: { ...choice, size: [0.8, 0.8, 0.6] }, growth: 10 }, [1, 0.5]).growth, null);
+});
+
+test("beds of the plan in bed order, and the plants in one", async () => {
+  const { bedsOf, bedPlantings } = await import("./garden.ts");
+  const sq: [number, number][] = [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const b = { floors: [{ id: "f", outdoor: ["bed_13", "bed_2", "bed_10", "lawn"].map((a) => ({ id: a, type: "bed", area_id: a, points: sq })), furniture: [] }] } as unknown as Building;
+  assert.deepEqual(
+    bedsOf(b, garden()).map((x) => x.zone.name),
+    ["Bed 2", "Bed 10", "Bed 13"],
+  );
+  assert.deepEqual(
+    bedPlantings(garden(), "z2").map((p) => p.name),
+    ["Lettuce 1"],
+  );
+});
