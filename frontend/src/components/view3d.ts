@@ -4985,8 +4985,12 @@ export class Fp3dView3d extends LitElement {
   }
 
   /** Fork (fedgar): a tapped garden bed (an outdoor area linked to a Homestead zone) opens its card. */
-  private onBedTap(floorId: string, outdoorId: string, x: number, z: number): boolean {
-    if (!this.building || !bedOf(this.building, this._garden, floorId, outdoorId)) return false;
+  private onBedTap(floorId: string, _zoneId: string, x: number, z: number): boolean {
+    // the area picked can be the lawn the beds lie in: the bed under the point is what is meant
+    const b = this.building;
+    const floor = b?.floors.find((f) => f.id === floorId);
+    const outdoorId = floor?.outdoor?.find((o) => o.points.length >= 3 && pointInPolygon([x, z], o.points) && !!bedOf(b!, this._garden, floorId, o.id))?.id;
+    if (!b || !outdoorId) return false;
     this._plantCard = null;
     this._plantEdit = null;
     this._bedAdd = null;
