@@ -473,6 +473,9 @@ ITEMS = [
     ("sage", "Sage", lambda: herb_bush(47, {"leaf": "#8a9e84"}, 0.45, 0.5, 5, "#9a7fd1", 6), ["herb", "shrub"]),
     ("oregano", "Oregano", lambda: herb_bush(48, {"leaf": "#5d8f4a", "leaf2": "#6c9c55"}, 0.25, 0.4, 6, "#e3c3ea", 8), ["herb"]),
     ("chives", "Chives", lambda: chives(49), ["herb", "allium"]),
+    # anything else: the plant gets the name typed for it
+    ("plant", "Other plant", lambda: herb_bush(50, {"leaf": "#4b9a45", "leaf2": "#5daa52"}, 0.6, 0.45, 7), ["generic", "other", "shrub"]),
+    ("flowers", "Flowers", lambda: herb_bush(51, {"leaf": "#4f9440", "leaf2": "#5fa64d"}, 0.45, 0.4, 7, "#e05a8a", 24), ["generic", "flower"]),
 ]
 
 
@@ -503,7 +506,7 @@ def main() -> None:
             }
         )
         print(f"{ident:18} {tris:5} tris  {size}")
-    pack = {"id": "local.garden", "name": "Garden", "publisher": "Edgar fork", "release": 1, "description": "Fruit trees, vegetables and herbs, low-poly. Each plant can be drawn at a growth stage from 1 to 10.", "items": items}
+    pack = {"id": "local.garden", "name": "Garden", "publisher": "Edgar fork", "release": 2, "description": "Fruit trees, vegetables and herbs, low-poly. Each plant can be drawn at a growth stage from 1 to 10.", "items": items}
     (OUT / "pack.json").write_text(json.dumps(pack, indent=1) + "\n", encoding="utf-8")
 
 
