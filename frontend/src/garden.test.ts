@@ -65,6 +65,12 @@ test("the plant card: bed, last care including the bed's waterings, recent diary
     ["e1", "e2"],
   );
   assert.equal(plantCard(garden(), "nope"), null);
+  // a plant put in after the bed was watered: that watering is not its own
+  const g = garden();
+  g.plantings.p1.planted_on = "2026-11-12";
+  assert.equal(plantCard(g, "p1")!.last.watering, null);
+  // one that was already there has the bed's whole history
+  assert.equal(plantCard(garden(), "p3")!.last.watering, "2026-11-12");
 });
 
 test("Homestead's lists are keyed by id", () => {

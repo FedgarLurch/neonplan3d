@@ -191,9 +191,10 @@ export function plantCard(garden: GardenData, plantingId: string): PlantCard | n
   const p = garden.plantings[plantingId];
   if (!p) return null;
   const zone = p.zone_id ? garden.zones[p.zone_id] : undefined;
-  // the bed's waterings (a valve run) count for every plant in it
+  // the bed's waterings (a valve run) count for every plant in it, from the day it went in
+  const since = p.origin === "existing" ? "" : (p.planted_on ?? p.sown_on ?? "");
   const mine = Object.values(garden.events)
-    .filter((e) => e.planting_id === p.id || (!!p.zone_id && e.zone_id === p.zone_id))
+    .filter((e) => e.planting_id === p.id || (!!p.zone_id && e.zone_id === p.zone_id && e.done_on >= since))
     .sort((a, b) => (a.done_on < b.done_on ? 1 : a.done_on > b.done_on ? -1 : 0));
   const lastOf = (kind: string) => mine.find((e) => e.kind === kind)?.done_on ?? null;
   const how = p.origin === "sown" ? "Sown" : p.origin === "existing" ? "Already there" : "Planted";
