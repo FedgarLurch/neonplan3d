@@ -2,7 +2,7 @@
  "id": "local.garden",
  "name": "Garden",
  "publisher": "Edgar fork",
- "release": 1,
+ "release": 2,
  "description": "Fruit trees, vegetables and herbs, low-poly. Each plant can be drawn at a growth stage from 1 to 10.",
  "items": [
   {
@@ -1061,6 +1061,77 @@
    "tags": [
     "herb",
     "allium",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "plant",
+   "name": {
+    "en": "Other plant"
+   },
+   "size": [
+    0.81,
+    0.82,
+    0.59
+   ],
+   "model": "plant.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "generic",
+    "other",
+    "shrub",
+    "garden",
+    "plant",
+    "bed",
+    "vegetable garden"
+   ],
+   "symbol": [
+    {
+     "shape": "circle",
+     "x": 0,
+     "z": 0,
+     "r": 0.5
+    }
+   ]
+  },
+  {
+   "id": "flowers",
+   "name": {
+    "en": "Flowers"
+   },
+   "size": [
+    0.72,
+    0.72,
+    0.5
+   ],
+   "model": "flowers.glb",
+   "tone": "original",
+   "edges": false,
+   "growth": true,
+   "group": "plant",
+   "room": [
+    "garden"
+   ],
+   "tags": [
+    "generic",
+    "flower",
     "garden",
     "plant",
     "bed",
