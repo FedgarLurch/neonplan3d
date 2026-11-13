@@ -310,6 +310,10 @@ export interface Furniture {
   swap?: SwapRule | null;
   /** Fork (fedgar): a plant's growth from 1 to 10, drawn at that part of its full size (3 = 30 %); unset = full size. */
   growth?: number | null;
+  /** Fork (fedgar): the HA Homestead planting this plant is (written by the integration when the plan is saved). */
+  planting_id?: string | null;
+  /** Fork (fedgar): the day the planting was made from the plan. */
+  planting_on?: string | null;
   /** Fork (fedgar): custom model: the .glb file (a URL such as /local/neonplan3d/models/chair.glb). */
   model?: string | null;
   /** Fork (fedgar): custom model colours pulled into the neon look (default) or kept as they are. */
