@@ -119,7 +119,7 @@ export class Floorplan3dCard extends LitElement {
   }
 
   private view3d() {
-    return this.shadowRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; proHint(f: Feature): void; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void }) | null;
+    return this.shadowRoot?.querySelector("fp3d-view3d") as (HTMLElement & { resetView(): void; lookThrough(entityId: string): void; historyEntities(): HistorySpec; proHint(f: Feature): void; roomSheets(roomId: string): { id: string; icon: string; title: string }[]; openRoomSheet(roomId: string, id: string): void; gardenBed(outdoorId: string): unknown }) | null;
   }
 
   /** Time travel on or off; without the Pro add-on its hint shows. */
@@ -428,9 +428,10 @@ clearTimeout(this.cleanTimer);
                 this._roomId = null;
               }}
               @back=${() => this.back()}
+              @garden-bed=${() => this.requestUpdate()}
             ></fp3d-view3d>`
           : html`<p class="fp3d-card-msg">${this.data.error ?? (b ? translate(this.hass, "no_building") : translate(this.hass, "loading"))}</p>`}
-        ${this._roomId && b && this._config?.room_panel !== false
+        ${this._roomId && b && this._config?.room_panel !== false && !this.view3d()?.gardenBed(this._roomId)
           ? html`<fp3d-room-panel
               @camera-look=${(e: CustomEvent<{ entity: string }>) => this.view3d()?.lookThrough(e.detail.entity)}
               class="fp3d-card-panel"
