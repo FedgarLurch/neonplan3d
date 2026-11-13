@@ -61,8 +61,18 @@ const OPEN = new Set(["open", "opening", "on"]);
 /** The garden as the subscription sends it (a missing part is empty). */
 export function readGarden(msg: unknown): GardenData | null {
   if (!msg || typeof msg !== "object") return null;
-  const m = msg as Partial<GardenData>;
-  return { zones: m.zones ?? {}, plantings: m.plantings ?? {}, events: m.events ?? {}, growth: m.growth ?? {} };
+  const m = msg as Record<string, unknown>;
+  // Homestead sends its collections as lists; keyed by id here
+  const byId = <T extends { id: string }>(v: unknown): Record<string, T> => {
+    if (Array.isArray(v)) return Object.fromEntries((v as T[]).filter((x) => x && typeof x.id === "string").map((x) => [x.id, x]));
+    return v && typeof v === "object" ? (v as Record<string, T>) : {};
+  };
+  return {
+    zones: byId<GardenZone>(m.zones),
+    plantings: byId<GardenPlanting>(m.plantings),
+    events: byId<GardenEvent>(m.events),
+    growth: (m.growth as Record<string, number>) ?? {},
+  };
 }
 
 /** A planting still in the ground (Homestead keeps dead and removed ones for their history). */

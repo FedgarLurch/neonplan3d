@@ -67,6 +67,13 @@ test("the plant card: bed, last care including the bed's waterings, recent diary
   assert.equal(plantCard(garden(), "nope"), null);
 });
 
+test("Homestead's lists are keyed by id", () => {
+  const g = readGarden({ zones: [{ id: "z", name: "Bed 1" }], plantings: [{ id: "p", name: "Pear Tree" }], events: [], growth: { p: 10 } })!;
+  assert.equal(g.zones.z.name, "Bed 1");
+  assert.equal(g.plantings.p.name, "Pear Tree");
+  assert.equal(plantCard(g, "p")?.name, "Pear Tree");
+});
+
 test("ago", () => {
   const now = new Date("2026-11-13T15:00:00");
   assert.equal(ago(null, now), "never");
