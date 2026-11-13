@@ -1,10 +1,12 @@
 """Fork (fedgar): plants placed in the plan become plantings in HA Homestead.
 
-Runs on every plan save from the editor. A Garden pack plant (a local pack item with growth) that is new in the
-plan is created in Homestead, in the zone whose HA area is the bed it stands in; its planting id is kept on the
-item. Moving it to another bed moves the planting, changing its Growth sets the planting's growth stage, and
-deleting it from the plan ends the planting (a planting made today with nothing in its diary is deleted instead,
-so a misplaced plant leaves no trace). Without Homestead, or if a call fails, the plan is saved as it is.
+Runs on every plan save (the editor, or a plant added from a bed's card in the 3D view). A Garden pack plant (a
+local pack item with growth) that is new in the plan is created in Homestead, in the zone whose HA area is the bed
+it stands in; its planting id is kept on the item. The generic items (Other plant, Flowers) take the name typed for
+them, and a variety typed when it was added goes on the planting. Moving it to another bed moves the planting,
+changing its Growth sets the planting's growth stage, and deleting it from the plan ends the planting (a planting
+made today with nothing in its diary is deleted instead, so a misplaced plant leaves no trace). Without Homestead,
+or if a call fails, the plan is saved as it is.
 """
 
 from __future__ import annotations
@@ -54,6 +56,9 @@ PLANTS: dict[str, tuple[str, str, str | None]] = {
     "oregano": ("Origanum vulgare", "herb", None),
     "chives": ("Allium schoenoprasum", "herb", None),
 }
+
+# Items for anything else: the plant is called what was typed for it (the item's own name)
+GENERIC: dict[str, str] = {"plant": "other", "flowers": "flower"}
 
 
 def base_name(label: str) -> str:
@@ -156,8 +161,12 @@ async def async_sync_garden(
             if pid:
                 continue  # removed in Homestead: leave it alone
             key = item["type"][len(GARDEN_PACK) :]
-            species, plant_type, variety = PLANTS.get(key, (None, "other", None))
+            species, plant_type, variety = PLANTS.get(key, (None, GENERIC.get(key, "other"), None))
             base = base_name(names.get(key) or key.replace("_", " "))
+            own = str(item.get("name") or "").strip()
+            if key in GENERIC and own:
+                base = species = own
+            variety = str(item.get("plant_variety") or "").strip() or variety
             payload: dict[str, Any] = {
                 "name": next_name(base, plant_type, [p.name for p in data.plantings.values()]),
                 "species": species or base,
