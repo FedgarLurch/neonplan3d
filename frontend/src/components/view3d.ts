@@ -147,7 +147,7 @@ import { Director, HOLD_DEFAULT, directorAny, doorbellCamera, doorbellEntities, 
 import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
 import { hourCycle } from "../units.ts";
-import { ago, gardenFurniture, gardenKey, gardenPatches, gardenValves, kindIcon, plantCard, readGarden, type GardenData } from "../garden.ts";
+import { ago, bedOf, bedPlantings, bedsOf, bedWatering, findChoices, freeSpot, gardenChoices, gardenFurniture, gardenKey, gardenPatches, gardenValves, kindIcon, newPlantItem, placedToday, plantCard, plantsIn, readGarden, type Bed, type GardenChoice, type GardenData } from "../garden.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 /** "room": no symbols in the house and floor views, in a room only that room's (D477, D595). */
@@ -333,6 +333,9 @@ export class Fp3dView3d extends LitElement {
     _binInfo: { state: true },
     _garden: { state: true },
     _plantCard: { state: true },
+    _bedCard: { state: true },
+    _bedAdd: { state: true },
+    _plantEdit: { state: true },
     _gangMenu: { state: true },
     householdCard: { attribute: false },
     _sceneFired: { state: true },
@@ -537,8 +540,14 @@ export class Fp3dView3d extends LitElement {
   private binInfoTimer: ReturnType<typeof setTimeout> | undefined;
   /** Fork (fedgar): HA Homestead's garden (beds, plantings, diary, today's growth), null without Homestead. */
   private declare _garden: GardenData | null;
-  /** Fork (fedgar): the garden plant tapped (furniture id) – its card. */
+  /** Fork (fedgar): the garden plant whose card is open (its Homestead planting id). */
   private declare _plantCard: string | null;
+  /** Fork (fedgar): the garden bed tapped (its card), with the point tapped (where a new plant goes). */
+  private declare _bedCard: { floorId: string; areaId: string; at: [number, number] | null } | null;
+  /** Fork (fedgar): the bed card's Add plant form. */
+  private declare _bedAdd: { query: string; choice: string | null; name: string; variety: string; growth: number } | null;
+  /** Fork (fedgar): the plant card's edit part (null: closed; "remove": asking how it ended). */
+  private declare _plantEdit: "edit" | "remove" | null;
   private gardenUnsub: (() => void) | null = null;
   private gardenAsked = false;
   /** The glass card "Today in the household" (Haushalt Pro; the dashboard card can switch it off). */
@@ -763,6 +772,9 @@ export class Fp3dView3d extends LitElement {
     this._binInfo = null;
     this._garden = null;
     this._plantCard = null;
+    this._bedCard = null;
+    this._bedAdd = null;
+    this._plantEdit = null;
     this._gangMenu = null;
     this.householdCard = true;
     this.scenes = true;
@@ -948,6 +960,7 @@ export class Fp3dView3d extends LitElement {
         onFurnitureSelect: (id) => this.fire("furniture-select", { id }),
         onFurnitureMove: (id, x, z) => this.fire("furniture-move", { id, x, z }),
         onFurnitureTap: (id) => this.onPlantTap(id),
+        onZoneTap: (floorId, roomId, x, z) => this.onBedTap(floorId, roomId, x, z),
         onDeviceSelect: (id) => this.fire("device-select", { id }),
         onDeviceMove: (id, x, z) => this.fire("device-move", { id, x, z }),
         // stats can be switched on at any time; they only cause updates while shown
@@ -4958,32 +4971,78 @@ export class Fp3dView3d extends LitElement {
   private onPlantTap(furnitureId: string): boolean {
     const f = this.building?.floors.flatMap((x) => x.furniture).find((x) => x.id === furnitureId);
     if (!f?.planting_id || !this._garden?.plantings[f.planting_id]) return false;
-    this._plantCard = furnitureId;
+    this.openPlant(f.planting_id);
     return true;
   }
 
-  /** Fork (fedgar): the plant card – bed, when it went in, growth (tap to change), last care, recent diary, log buttons. */
+  private openPlant(plantingId: string | null): void {
+    this._plantCard = plantingId;
+    this._plantEdit = null;
+    if (plantingId) {
+      this._bedCard = null;
+      this._bedAdd = null;
+    }
+  }
+
+  /** Fork (fedgar): a tapped garden bed (an outdoor area linked to a Homestead zone) opens its card. */
+  private onBedTap(floorId: string, outdoorId: string, x: number, z: number): boolean {
+    if (!this.building || !bedOf(this.building, this._garden, floorId, outdoorId)) return false;
+    this._plantCard = null;
+    this._plantEdit = null;
+    this._bedAdd = null;
+    this._bedCard = { floorId, areaId: outdoorId, at: [x, z] };
+    return true;
+  }
+
+  /** Fork (fedgar): plants are added, moved and removed from their cards (administrators only, like the editor). */
+  private get gardenEditable(): boolean {
+    return !!this.hass?.user?.is_admin && !this.ro;
+  }
+
+  /** Fork (fedgar): changes the plan and saves it; the integration brings Homestead in line on the save. */
+  private savePlan(mutate: (b: Building) => void): Promise<unknown> {
+    const cur = this.building;
+    if (!cur || !this.hass || !this.gardenEditable) return Promise.resolve();
+    const next = structuredClone(cur);
+    mutate(next);
+    this.building = next;
+    return saveBuilding(this.hass, next).catch((err) => this.serviceFailed("neonplan3d/building/save", err));
+  }
+
+  private gardenCall(service: string, data: Record<string, unknown>): Promise<unknown> {
+    const hass = this.hass;
+    if (!hass) return Promise.resolve();
+    return Promise.resolve(hass.callService("homestead", service, data)).catch((err: unknown) => this.serviceFailed(`homestead.${service}`, err));
+  }
+
+  /** Fork (fedgar): the plant card – bed, when it went in, growth (tap to change), last care, recent diary, log buttons, editing. */
   private renderPlantCard() {
     const hass = this.hass;
     const g = this._garden;
-    const f = this._plantCard ? this.building?.floors.flatMap((x) => x.furniture).find((x) => x.id === this._plantCard) : undefined;
-    const card = f?.planting_id && g ? plantCard(g, f.planting_id) : null;
-    if (!hass || !f?.planting_id || !card) return nothing;
-    const pid = f.planting_id;
-    const call = (service: string, data: Record<string, unknown>) =>
-      void Promise.resolve(hass.callService("homestead", service, data)).catch((err: unknown) => this.serviceFailed(`homestead.${service}`, err));
+    const pid = this._plantCard;
+    const card = pid && g ? plantCard(g, pid) : null;
+    if (!hass || !pid || !g || !card) return nothing;
+    const f = this.building?.floors.flatMap((x) => x.furniture).find((x) => x.planting_id === pid);
+    const planting = g.plantings[pid];
     const log = (kind: string) => {
-      call("add_event", { kind, planting_id: pid });
+      void this.gardenCall("add_event", { kind, planting_id: pid });
       this.showNote(`${kindIcon(kind)} ${card.name}: logged`);
     };
     const stage = card.stage === null ? null : Math.round(card.stage);
-    const setStage = (n: number) => call("set_growth", { id: pid, stage: n });
+    const setStage = (n: number) => void this.gardenCall("set_growth", { id: pid, stage: n });
+    const edit = this._plantEdit;
     return html`<div class="fp3d-plant">
       <div class="fp3d-plant-head">
         <div><b>${card.name}</b>${card.species ? html`<small>${card.species}</small>` : nothing}</div>
-        <button class="fp3d-plant-x" aria-label="Close" @click=${() => (this._plantCard = null)}>✕</button>
+        <div class="fp3d-plant-tools">
+          ${this.gardenEditable
+            ? html`<button class="fp3d-plant-x ${edit ? "on" : ""}" aria-label="Edit" title="Edit" @click=${() => (this._plantEdit = edit ? null : "edit")}>✎</button>`
+            : nothing}
+          <button class="fp3d-plant-x" aria-label="Close" @click=${() => this.openPlant(null)}>✕</button>
+        </div>
       </div>
       <div class="fp3d-plant-row">${card.bed ?? "No bed"} · ${card.how}${card.started ? html` ${ago(card.started)}` : nothing}</div>
+      ${edit === "edit" ? this.renderPlantEdit(pid, planting, f) : edit === "remove" ? this.renderPlantRemove(pid, card.name, f) : nothing}
       <div class="fp3d-plant-grow">
         <span>Growth</span>
         ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(
@@ -5006,6 +5065,187 @@ export class Fp3dView3d extends LitElement {
             ${card.recent.map((e) => html`<div><span>${kindIcon(e.kind)}</span><span>${e.notes || e.kind}</span><small>${ago(e.done_on)}</small></div>`)}
           </div>`
         : nothing}
+    </div>`;
+  }
+
+  /** Fork (fedgar): name, variety, which bed, remove. */
+  private renderPlantEdit(pid: string, planting: GardenData["plantings"][string], f: Furniture | undefined) {
+    const b = this.building;
+    const beds = b ? bedsOf(b, this._garden) : [];
+    const save = (field: "name" | "variety", e: Event) => {
+      const value = (e.target as HTMLInputElement).value.trim();
+      if (field === "name" && !value) return;
+      if (value === ((field === "name" ? planting.name : planting.variety) ?? "")) return;
+      void this.gardenCall("update_planting", { id: pid, [field]: value || null });
+    };
+    const move = (zoneId: string) => {
+      const bed = beds.find((x) => x.zone.id === zoneId);
+      if (!bed || zoneId === planting.zone_id) return;
+      if (!f) {
+        // not in the plan: only Homestead knows where it is
+        void this.gardenCall("update_planting", { id: pid, zone_id: zoneId });
+        return;
+      }
+      void this.savePlan((next) => {
+        const floor = next.floors.find((fl) => fl.id === bed.floorId);
+        const others = floor ? plantsIn(floor.furniture.filter((x) => x.id !== f.id), bed.points) : [];
+        const [x, z] = freeSpot(bed.points, others, Math.max(f.w, f.d) / 2, null);
+        for (const fl of next.floors) fl.furniture = fl.furniture.filter((x) => x.id !== f.id);
+        floor?.furniture.push({ ...f, x, z });
+      }).then(() => this.showNote(`${planting.name} moved to ${bed.zone.name}`));
+    };
+    return html`<div class="fp3d-plant-edit">
+      <label>Name <input .value=${planting.name} @change=${(e: Event) => save("name", e)} /></label>
+      <label>Variety <input .value=${planting.variety ?? ""} placeholder="None" @change=${(e: Event) => save("variety", e)} /></label>
+      ${beds.length
+        ? html`<label
+            >Bed
+            <select @change=${(e: Event) => move((e.target as HTMLSelectElement).value)}>
+              ${planting.zone_id && beds.some((x) => x.zone.id === planting.zone_id) ? nothing : html`<option value="" selected>No bed</option>`}
+              ${beds.map((x) => html`<option value=${x.zone.id} ?selected=${x.zone.id === planting.zone_id}>${x.zone.name}</option>`)}
+            </select></label
+          >`
+        : nothing}
+      <button class="fp3d-plant-remove" @click=${() => (this._plantEdit = "remove")}>Remove plant…</button>
+    </div>`;
+  }
+
+  /** Fork (fedgar): how the plant ended (the diary keeps it), or gone without a trace when it was placed by mistake today. */
+  private renderPlantRemove(pid: string, name: string, f: Furniture | undefined) {
+    const g = this._garden!;
+    const today = new Date().toLocaleDateString("sv-SE");
+    const mistake = placedToday(g, pid, f, today);
+    const dropFromPlan = () =>
+      f ? this.savePlan((next) => next.floors.forEach((fl) => (fl.furniture = fl.furniture.filter((x) => x.id !== f.id)))) : Promise.resolve();
+    const end = async (reason: "died" | "removed" | "finished") => {
+      // the diary entry first: the plan save then sees the plant already ended and leaves it be
+      await this.gardenCall("add_event", { kind: "removal", planting_id: pid, reason });
+      await dropFromPlan();
+      this.openPlant(null);
+      this.showNote(`🪦 ${name}: ${reason === "died" ? "died" : reason === "finished" ? "done for the season" : "pulled"}`);
+    };
+    return html`<div class="fp3d-plant-edit">
+      <div>What happened to it?</div>
+      <div class="fp3d-plant-log">
+        <button @click=${() => void end("died")}>Died</button>
+        <button @click=${() => void end("finished")}>Season over</button>
+        <button @click=${() => void end("removed")}>Pulled</button>
+      </div>
+      ${mistake
+        ? html`<button
+            class="fp3d-plant-remove"
+            @click=${async () => {
+              await dropFromPlan();
+              this.openPlant(null);
+              this.showNote(`${name} removed`);
+            }}
+          >
+            Placed by mistake (delete it)
+          </button>`
+        : nothing}
+      <button class="fp3d-plant-cancel" @click=${() => (this._plantEdit = "edit")}>Cancel</button>
+    </div>`;
+  }
+
+  /** Fork (fedgar): a bed's card – how it is watered, its plants (tap for their card), adding a plant. */
+  private renderBedCard() {
+    const g = this._garden;
+    const b = this.building;
+    const open = this._bedCard;
+    const bed = open && b ? bedOf(b, g, open.floorId, open.areaId) : null;
+    if (!this.hass || !g || !bed || !open) return nothing;
+    const plants = bedPlantings(g, bed.zone.id);
+    const valve = bed.zone.valve_entity ? this.hass.states[bed.zone.valve_entity] : undefined;
+    const valveName = bed.zone.valve_entity ? ((valve?.attributes.friendly_name as string | undefined) ?? bed.zone.valve_entity) : null;
+    const watering = bedWatering(bed.zone, valveName);
+    const lastWater = Object.values(g.events)
+      .filter((e) => e.kind === "watering" && e.zone_id === bed.zone.id)
+      .reduce<string | null>((a, e) => (a && a > e.done_on ? a : e.done_on), null);
+    const close = () => {
+      this._bedCard = null;
+      this._bedAdd = null;
+    };
+    return html`<div class="fp3d-plant">
+      <div class="fp3d-plant-head">
+        <div><b>${bed.zone.name}</b>${watering ? html`<small>${watering}</small>` : nothing}</div>
+        <button class="fp3d-plant-x" aria-label="Close" @click=${close}>✕</button>
+      </div>
+      <div class="fp3d-plant-row">💧 Watered ${ago(lastWater)}${valve?.state === "open" ? " · running now" : ""}</div>
+      ${this._bedAdd
+        ? this.renderBedAdd(bed, open.at)
+        : html`<div class="fp3d-bed-plants">
+              ${plants.length
+                ? plants.map(
+                    (p) =>
+                      html`<button @click=${() => this.openPlant(p.id)}>
+                        <span>${p.name}</span><small>${p.variety ?? ""}</small><span>›</span>
+                      </button>`,
+                  )
+                : html`<div class="fp3d-bed-empty">Nothing planted yet.</div>`}
+            </div>
+            ${this.gardenEditable
+              ? html`<button class="fp3d-bed-addbtn" @click=${() => (this._bedAdd = { query: "", choice: null, name: "", variety: "", growth: 3 })}>＋ Add plant</button>`
+              : nothing}`}
+    </div>`;
+  }
+
+  /** Fork (fedgar): choose the plant, its variety and how it goes in; it is placed where the bed was tapped. */
+  private renderBedAdd(bed: Bed, at: [number, number] | null) {
+    const form = this._bedAdd!;
+    const set = (patch: Partial<NonNullable<typeof this._bedAdd>>) => (this._bedAdd = { ...form, ...patch });
+    const choices = gardenChoices(getPacks(), this.hass?.language ?? "en");
+    const choice = choices.find((c) => c.type === form.choice) ?? null;
+    if (!choices.length) return html`<div class="fp3d-bed-empty">The Garden pack is not installed.</div>`;
+    const how = form.growth >= 10 ? "existing" : form.growth <= 1 ? "seed" : "transplant";
+    const canAdd = !!choice && (!choice.generic || !!form.name.trim());
+    const add = async () => {
+      if (!choice || !canAdd) return;
+      const plant = { choice, name: form.name, variety: form.variety, growth: form.growth };
+      await this.savePlan((next) => {
+        const floor = next.floors.find((fl) => fl.id === bed.floorId);
+        if (!floor) return;
+        const spot = freeSpot(bed.points, plantsIn(floor.furniture, bed.points), Math.max(choice.size[0], choice.size[1]) / 2, at);
+        floor.furniture.push(newPlantItem(uid("furniture"), plant, spot));
+      });
+      this._bedAdd = null;
+      this.showNote(`🌱 ${choice.generic ? form.name.trim() : choice.name} added to ${bed.zone.name}`);
+    };
+    const pick = (c: GardenChoice) => set({ choice: c.type, name: c.generic && !form.name ? form.query : form.name });
+    if (!choice) {
+      const found = findChoices(choices, form.query);
+      let group = "";
+      return html`<div class="fp3d-bed-add">
+        <input class="fp3d-bed-search" placeholder="Search plants" .value=${form.query} @input=${(e: Event) => set({ query: (e.target as HTMLInputElement).value })} />
+        <div class="fp3d-bed-list">
+          ${found.map((c) => {
+            const head = c.group !== group ? html`<div class="fp3d-bed-group">${(group = c.group)}</div>` : nothing;
+            const label = c.generic && form.query.trim() ? html`${c.name}: <i>${form.query.trim()}</i>` : c.name;
+            return html`${head}<button @click=${() => pick(c)}>${label}</button>`;
+          })}
+        </div>
+        <button class="fp3d-plant-cancel" @click=${() => (this._bedAdd = null)}>Cancel</button>
+      </div>`;
+    }
+    return html`<div class="fp3d-bed-add">
+      <div class="fp3d-bed-chosen"><b>${choice.name}</b><button class="fp3d-plant-cancel" @click=${() => set({ choice: null })}>Change</button></div>
+      ${choice.generic
+        ? html`<label>Name <input placeholder="Lavender, Marigold…" .value=${form.name} @input=${(e: Event) => set({ name: (e.target as HTMLInputElement).value })} /></label>`
+        : nothing}
+      <label>Variety <input placeholder="Optional" .value=${form.variety} @input=${(e: Event) => set({ variety: (e.target as HTMLInputElement).value })} /></label>
+      <div class="fp3d-plant-log">
+        <button class="${how === "seed" ? "on" : ""}" @click=${() => set({ growth: 1 })}>🌰 Seed</button>
+        <button class="${how === "transplant" ? "on" : ""}" @click=${() => set({ growth: form.growth > 1 && form.growth < 10 ? form.growth : 3 })}>🌱 Transplant</button>
+        <button class="${how === "existing" ? "on" : ""}" @click=${() => set({ growth: 10 })}>🌳 Established</button>
+      </div>
+      ${how === "transplant"
+        ? html`<div class="fp3d-plant-grow">
+            <span>Size</span>
+            ${[2, 3, 4, 5, 6, 7, 8, 9].map(
+              (n) => html`<button class="${n <= form.growth ? "on" : ""}" title="${n * 10} % of full size" @click=${() => set({ growth: n })}>${n}</button>`,
+            )}
+          </div>`
+        : nothing}
+      <button class="fp3d-bed-addbtn" ?disabled=${!canAdd} @click=${() => void add()}>Add to ${bed.zone.name}</button>
     </div>`;
   }
   private shownHideKey = "";
@@ -5811,7 +6051,7 @@ export class Fp3dView3d extends LitElement {
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderLegend()}
-      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderPlantCard()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderNote()}
+      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderPlantCard()} ${this.renderBedCard()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderNote()}
       ${this.clean ? nothing : this.renderProHint()} ${this.renderMenu()} ${this.renderEye()}
       ${this.renderMic()}
       ${this._announce ? html`<div class="fp3d-announce" role="status" @click=${() => (this._announce = null)}>📢 ${this._announce}</div>` : nothing}
@@ -6135,6 +6375,126 @@ export class Fp3dView3d extends LitElement {
       }
       .fp3d-plant-diary small {
         font-style: normal;
+      }
+      .fp3d-plant {
+        max-height: calc(100% - 80px);
+        overflow-y: auto;
+      }
+      .fp3d-plant-tools {
+        display: flex;
+        gap: 2px;
+      }
+      .fp3d-plant-x.on {
+        opacity: 1;
+        color: #8fd14f;
+      }
+      .fp3d-plant-log button.on {
+        background: rgba(99, 153, 34, 0.55);
+        border-color: #8fd14f;
+      }
+      .fp3d-plant-edit,
+      .fp3d-bed-add {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px 0;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .fp3d-plant-edit label,
+      .fp3d-bed-add label {
+        display: grid;
+        grid-template-columns: 56px 1fr;
+        align-items: center;
+        gap: 6px;
+        opacity: 0.95;
+      }
+      .fp3d-plant input,
+      .fp3d-plant select {
+        min-width: 0;
+        padding: 6px 8px;
+        border-radius: 8px;
+        border: 1px solid rgba(190, 205, 230, 0.35);
+        background: rgba(255, 255, 255, 0.07);
+        color: inherit;
+        font: inherit;
+      }
+      .fp3d-plant select option {
+        color: #111;
+      }
+      .fp3d-plant-remove,
+      .fp3d-plant-cancel,
+      .fp3d-bed-addbtn {
+        padding: 7px 10px;
+        border-radius: 999px;
+        border: 1px solid rgba(190, 205, 230, 0.45);
+        background: rgba(255, 255, 255, 0.08);
+        color: inherit;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .fp3d-plant-remove {
+        border-color: rgba(255, 120, 120, 0.55);
+        color: #ffb3b3;
+      }
+      .fp3d-plant-cancel {
+        align-self: flex-start;
+        border-color: transparent;
+        background: none;
+        opacity: 0.75;
+      }
+      .fp3d-bed-addbtn {
+        border-color: #8fd14f;
+        background: rgba(99, 153, 34, 0.35);
+        font-size: 13px;
+      }
+      .fp3d-bed-addbtn:disabled {
+        opacity: 0.45;
+        cursor: default;
+      }
+      .fp3d-bed-plants,
+      .fp3d-bed-list {
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+      }
+      .fp3d-bed-list {
+        max-height: 240px;
+        overflow-y: auto;
+      }
+      .fp3d-bed-plants button,
+      .fp3d-bed-list button {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 7px 8px;
+        border: 0;
+        border-radius: 8px;
+        background: rgba(255, 255, 255, 0.05);
+        color: inherit;
+        font: inherit;
+        text-align: left;
+        cursor: pointer;
+      }
+      .fp3d-bed-plants button span:first-child {
+        flex: 1;
+      }
+      .fp3d-bed-group {
+        margin-top: 6px;
+        font-size: 11px;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        opacity: 0.6;
+      }
+      .fp3d-bed-empty {
+        opacity: 0.7;
+        padding: 4px 0;
+      }
+      .fp3d-bed-chosen {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
       }
       .fp3d-hh {
         position: absolute;
