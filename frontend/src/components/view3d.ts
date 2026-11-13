@@ -147,6 +147,7 @@ import { Director, HOLD_DEFAULT, directorAny, doorbellCamera, doorbellEntities, 
 import type { HistorySpec, ReplayInfo } from "../timetravel/types.ts";
 import { sunPath, type SunPath } from "../sun-path.ts";
 import { hourCycle } from "../units.ts";
+import { ago, gardenFurniture, gardenKey, gardenPatches, gardenValves, kindIcon, plantCard, readGarden, type GardenData } from "../garden.ts";
 
 /** Which HTML markers are shown: none, only what has no 3D object or shows a value, or all. */
 /** "room": no symbols in the house and floor views, in a room only that room's (D477, D595). */
@@ -330,6 +331,8 @@ export class Fp3dView3d extends LitElement {
     _household: { state: true },
     _hhFolded: { state: true },
     _binInfo: { state: true },
+    _garden: { state: true },
+    _plantCard: { state: true },
     _gangMenu: { state: true },
     householdCard: { attribute: false },
     _sceneFired: { state: true },
@@ -532,6 +535,12 @@ export class Fp3dView3d extends LitElement {
   /** A wall switch or socket with several gangs: its small menu (one button per gang). */
   private declare _gangMenu: { furnitureId: string; x: number; y: number } | null;
   private binInfoTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Fork (fedgar): HA Homestead's garden (beds, plantings, diary, today's growth), null without Homestead. */
+  private declare _garden: GardenData | null;
+  /** Fork (fedgar): the garden plant tapped (furniture id) – its card. */
+  private declare _plantCard: string | null;
+  private gardenUnsub: (() => void) | null = null;
+  private gardenAsked = false;
   /** The glass card "Today in the household" (Haushalt Pro; the dashboard card can switch it off). */
   declare householdCard: boolean;
   private alertSrc: AlertSources | null = null;
@@ -752,6 +761,8 @@ export class Fp3dView3d extends LitElement {
     this._household = [];
     this._hhFolded = readFlag("neonplan3d.hhFolded");
     this._binInfo = null;
+    this._garden = null;
+    this._plantCard = null;
     this._gangMenu = null;
     this.householdCard = true;
     this.scenes = true;
@@ -821,6 +832,9 @@ export class Fp3dView3d extends LitElement {
 
   disconnectedCallback(): void {
     super.disconnectedCallback();
+    this.gardenUnsub?.();
+    this.gardenUnsub = null;
+    this.gardenAsked = false;
     document.removeEventListener("visibilitychange", this.onVisible);
     this.stopWalk();
     this.pets?.dispose();
@@ -933,6 +947,7 @@ export class Fp3dView3d extends LitElement {
         onDeviceSwipe: (id, phase, dy, x, y) => this.onDeviceSwipe(id, phase, dy, x, y),
         onFurnitureSelect: (id) => this.fire("furniture-select", { id }),
         onFurnitureMove: (id, x, z) => this.fire("furniture-move", { id, x, z }),
+        onFurnitureTap: (id) => this.onPlantTap(id),
         onDeviceSelect: (id) => this.fire("device-select", { id }),
         onDeviceMove: (id, x, z) => this.fire("device-move", { id, x, z }),
         // stats can be switched on at any time; they only cause updates while shown
@@ -1019,9 +1034,14 @@ export class Fp3dView3d extends LitElement {
       v.setBuilding(this.shownBuilding()!);
       if (startChanged && this.floorId === null) v.resetView();
     } else if (changed.has("plain") && changed.get("plain") !== undefined && this.building) v.setBuilding(this.shownBuilding()!);
+    // fork (fedgar): Homestead's garden changed (growth, a plant gone): redraw when the plants look different
+    else if (changed.has("_garden") && this.building && this.shownHideKey !== this.garden_key()) {
+      v.setBuilding(this.shownBuilding()!);
+      this.syncDevices(true);
+    } else if (changed.has("_garden") && this.building) this.syncDevices(true);
     // fork (fedgar): an entity hid or showed an item: rebuild the scene without it (only when the set changes)
     else if (changed.has("hass") && this.hass && this.building) {
-      const key = stateRulesKey(this.plainBuilding()!, this.hass.states);
+      const key = stateRulesKey(this.plainBuilding()!, this.hass.states) + gardenKey(this.plainBuilding()!, this._garden);
       if (key !== this.shownHideKey) {
         v.setBuilding(this.shownBuilding()!);
         this.syncDevices(true);
@@ -1105,6 +1125,10 @@ export class Fp3dView3d extends LitElement {
         weatherEntityId: this.weatherEntityId,
       });
       if (anyModule()) this.watched = [...new Set([...this.watched, ...moduleWatched(this.sceneHost(hass, b))])];
+      // fork (fedgar): the garden's valves (their beds glow while they run)
+      this.watchGarden(hass);
+      const valves = gardenValves(this._garden);
+      if (valves.length) this.watched = [...new Set([...this.watched, ...valves])];
       force = true;
     }
     let changed = force || timed;
@@ -1560,7 +1584,11 @@ export class Fp3dView3d extends LitElement {
     const lines = this.scene.filter((p): p is Extract<ScenePiece, { kind: "line" }> => p.kind === "line");
     v.setFlows(this.dimmed ? energyFlows : [...energyFlows, ...pool.flows, ...lineFlows(lines)]);
     v.setPipes(pool.tubes);
-    v.setPatches(this.scene.filter((p): p is Extract<ScenePiece, { kind: "patch" }> => p.kind === "patch").map((p) => ({ floorId: p.floorId, points: p.points, y: p.y, color: p.color, opacity: this.dimmed ? p.opacity * 0.4 : p.opacity, ...(p.glow ? { glow: true } : {}) })));
+    v.setPatches([
+      ...this.scene.filter((p): p is Extract<ScenePiece, { kind: "patch" }> => p.kind === "patch").map((p) => ({ floorId: p.floorId, points: p.points, y: p.y, color: p.color, opacity: this.dimmed ? p.opacity * 0.4 : p.opacity, ...(p.glow ? { glow: true } : {}) })),
+      // fork (fedgar): beds whose valve runs glow in the valve's colour
+      ...gardenPatches(hass, b, this._garden),
+    ]);
     const roomSensors = SHOW_PRESENCE ? personsInRooms(hass, b) : [];
     const persons = released("locate") && personsShown(b) ? [...roomSensors, ...locatedPersons(hass, b, new Set(roomSensors.map((p) => p.id)))] : roomSensors;
     v.setPersonLook(personLook(b) === "pin" ? "pin" : "figure");
@@ -4883,7 +4911,7 @@ export class Fp3dView3d extends LitElement {
     if (!base) return base;
     // fork (fedgar): items hidden by their conditions stay out of the scene, swapped ones show their other version
     const states = this.hass?.states ?? {};
-    this.shownHideKey = this.hass ? stateRulesKey(base, states) : "|";
+    this.shownHideKey = (this.hass ? stateRulesKey(base, states) : "|") + gardenKey(base, this._garden);
     if (this.shownHideKey === "|") return base;
     if (this.hiddenOf?.from === base && this.hiddenOf.key === this.shownHideKey) return this.hiddenOf.to;
     const hidden = hiddenFurnitureIds(base, states);
@@ -4899,12 +4927,87 @@ export class Fp3dView3d extends LitElement {
       const shift = (d - f.d) / 2;
       return { ...f, type: f.swap.type, d, x: f.x - Math.sin(r) * shift, z: f.z + Math.cos(r) * shift };
     };
-    const to = { ...base, floors: base.floors.map((fl) => ({ ...fl, furniture: fl.furniture.filter((x) => !hidden.has(x.id)).map(swap) })) };
+    const to = { ...base, floors: base.floors.map((fl) => ({ ...fl, furniture: gardenFurniture(fl.furniture, this._garden).filter((x) => !hidden.has(x.id)).map(swap) })) };
     this.hiddenOf = { from: base, key: this.shownHideKey, to };
     return to;
   }
 
   private hiddenOf: { from: Building; key: string; to: Building } | null = null;
+
+  /** Fork (fedgar): the key shownBuilding would use now (to see whether the garden changed what is drawn). */
+  private garden_key(): string {
+    const base = this.plainBuilding();
+    if (!base) return this.shownHideKey ?? "";
+    return (this.hass ? stateRulesKey(base, this.hass.states) : "|") + gardenKey(base, this._garden);
+  }
+
+  /** Fork (fedgar): HA Homestead's data, kept up to date (it sends everything on every change). */
+  private watchGarden(hass: HomeAssistant): void {
+    if (this.gardenAsked || !(hass as { services?: Record<string, unknown> }).services?.homestead || !hass.connection) return;
+    this.gardenAsked = true;
+    hass.connection
+      .subscribeMessage((msg: unknown) => (this._garden = readGarden(msg)), { type: "homestead/subscribe" })
+      .then((unsub: () => void) => {
+        if (this.isConnected) this.gardenUnsub = unsub;
+        else unsub();
+      })
+      .catch(() => (this._garden = null));
+  }
+
+  /** Fork (fedgar): a tapped Garden plant opens its card; other items let the tap through. */
+  private onPlantTap(furnitureId: string): boolean {
+    const f = this.building?.floors.flatMap((x) => x.furniture).find((x) => x.id === furnitureId);
+    if (!f?.planting_id || !this._garden?.plantings[f.planting_id]) return false;
+    this._plantCard = furnitureId;
+    return true;
+  }
+
+  /** Fork (fedgar): the plant card – bed, when it went in, growth (tap to change), last care, recent diary, log buttons. */
+  private renderPlantCard() {
+    const hass = this.hass;
+    const g = this._garden;
+    const f = this._plantCard ? this.building?.floors.flatMap((x) => x.furniture).find((x) => x.id === this._plantCard) : undefined;
+    const card = f?.planting_id && g ? plantCard(g, f.planting_id) : null;
+    if (!hass || !f?.planting_id || !card) return nothing;
+    const pid = f.planting_id;
+    const call = (service: string, data: Record<string, unknown>) =>
+      void Promise.resolve(hass.callService("homestead", service, data)).catch((err: unknown) => this.serviceFailed(`homestead.${service}`, err));
+    const log = (kind: string) => {
+      call("add_event", { kind, planting_id: pid });
+      this.showNote(`${kindIcon(kind)} ${card.name}: logged`);
+    };
+    const stage = card.stage === null ? null : Math.round(card.stage);
+    const setStage = (n: number) => call("set_growth", { id: pid, stage: n });
+    return html`<div class="fp3d-plant">
+      <div class="fp3d-plant-head">
+        <div><b>${card.name}</b>${card.species ? html`<small>${card.species}</small>` : nothing}</div>
+        <button class="fp3d-plant-x" aria-label="Close" @click=${() => (this._plantCard = null)}>✕</button>
+      </div>
+      <div class="fp3d-plant-row">${card.bed ?? "No bed"} · ${card.how}${card.started ? html` ${ago(card.started)}` : nothing}</div>
+      <div class="fp3d-plant-grow">
+        <span>Growth</span>
+        ${[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(
+          (n) =>
+            html`<button class="${stage !== null && n <= stage ? "on" : ""}" ?disabled=${this.ro} title=${n === 10 ? "Full size" : `${n * 10} %`} @click=${() => setStage(n)}>${n}</button>`,
+        )}
+      </div>
+      <div class="fp3d-plant-last">
+        <span>💧 ${ago(card.last.watering)}</span><span>🌿 ${ago(card.last.fertilizing)}</span><span>✂️ ${ago(card.last.pruning)}</span>
+      </div>
+      ${this.ro
+        ? nothing
+        : html`<div class="fp3d-plant-log">
+            <button @click=${() => log("watering")}>💧 Watered</button>
+            <button @click=${() => log("fertilizing")}>🌿 Fertilized</button>
+            <button @click=${() => log("pruning")}>✂️ Pruned</button>
+          </div>`}
+      ${card.recent.length
+        ? html`<div class="fp3d-plant-diary">
+            ${card.recent.map((e) => html`<div><span>${kindIcon(e.kind)}</span><span>${e.notes || e.kind}</span><small>${ago(e.done_on)}</small></div>`)}
+          </div>`
+        : nothing}
+    </div>`;
+  }
   private shownHideKey = "";
 
   private plainBuilding(): Building | null {
@@ -5708,7 +5811,7 @@ export class Fp3dView3d extends LitElement {
       style=${style}
     >
       ${this._error ? html`<p class="fp3d-error">${this._error}</p>` : nothing} ${this.clean ? nothing : this.renderEnergy()} ${this.renderHologram()} ${this.clean ? nothing : this.renderLegend()}
-      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderNote()}
+      ${this.renderClock()} ${this.renderAlerts()} ${this.clean || this._walk ? nothing : html`${this.renderHousehold()} ${this.renderThumbs()} ${this.renderScenes()} ${this.renderFind()} ${this.renderCentral()}`} ${this.clean ? nothing : this.renderWalk()} ${this.renderSwipe()} ${this.renderInfo()} ${this.renderBinInfo()} ${this.renderPlantCard()} ${this.renderGangMenu()} ${this.renderThrough()} ${this.renderCameraWall()} ${this.renderSheet()} ${this.renderSettings()} ${this.renderNote()}
       ${this.clean ? nothing : this.renderProHint()} ${this.renderMenu()} ${this.renderEye()}
       ${this.renderMic()}
       ${this._announce ? html`<div class="fp3d-announce" role="status" @click=${() => (this._announce = null)}>📢 ${this._announce}</div>` : nothing}
@@ -5925,6 +6028,113 @@ export class Fp3dView3d extends LitElement {
         border-color: #4ddf7a;
         background: rgba(77, 223, 122, 0.16);
         color: #a8ffc2;
+      }
+      /* fork (fedgar): a garden plant's card */
+      .fp3d-plant {
+        position: absolute;
+        right: 12px;
+        top: 58px;
+        z-index: 5;
+        width: min(300px, calc(100% - 24px));
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        padding: 12px;
+        border-radius: 14px;
+        background: rgba(10, 18, 34, 0.86);
+        border: 1px solid rgba(120, 220, 140, 0.4);
+        backdrop-filter: blur(8px);
+        box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);
+        color: #eef4ff;
+        font-size: 13px;
+      }
+      .fp3d-plant-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        gap: 8px;
+      }
+      .fp3d-plant-head b {
+        display: block;
+        font-size: 16px;
+      }
+      .fp3d-plant small {
+        opacity: 0.65;
+        font-style: italic;
+      }
+      .fp3d-plant-x {
+        border: 0;
+        background: none;
+        color: inherit;
+        font-size: 16px;
+        cursor: pointer;
+        padding: 2px 4px;
+        opacity: 0.7;
+      }
+      .fp3d-plant-row {
+        opacity: 0.85;
+      }
+      .fp3d-plant-grow {
+        display: flex;
+        align-items: center;
+        gap: 3px;
+      }
+      .fp3d-plant-grow span {
+        margin-right: 6px;
+        opacity: 0.8;
+      }
+      .fp3d-plant-grow button {
+        flex: 1;
+        min-width: 0;
+        height: 26px;
+        padding: 0;
+        border-radius: 6px;
+        border: 1px solid rgba(120, 220, 140, 0.35);
+        background: rgba(255, 255, 255, 0.05);
+        color: inherit;
+        font: inherit;
+        font-size: 11px;
+        cursor: pointer;
+      }
+      .fp3d-plant-grow button.on {
+        background: rgba(99, 153, 34, 0.55);
+        border-color: #8fd14f;
+      }
+      .fp3d-plant-last {
+        display: flex;
+        justify-content: space-between;
+        gap: 6px;
+        opacity: 0.9;
+      }
+      .fp3d-plant-log {
+        display: flex;
+        gap: 6px;
+      }
+      .fp3d-plant-log button {
+        flex: 1;
+        padding: 7px 4px;
+        border-radius: 999px;
+        border: 1px solid rgba(190, 205, 230, 0.45);
+        background: rgba(255, 255, 255, 0.08);
+        color: inherit;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .fp3d-plant-diary {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+        padding-top: 8px;
+      }
+      .fp3d-plant-diary div {
+        display: grid;
+        grid-template-columns: 20px 1fr auto;
+        gap: 6px;
+      }
+      .fp3d-plant-diary small {
+        font-style: normal;
       }
       .fp3d-hh {
         position: absolute;
