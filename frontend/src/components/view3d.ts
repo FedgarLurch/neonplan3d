@@ -1021,6 +1021,21 @@ export class Fp3dView3d extends LitElement {
     if (changed.has("hass")) this.watchAsk();
     // the star menu closes when a room or another floor is chosen (#220)
     if (this._central && ((changed.has("roomId") && changed.get("roomId") !== undefined) || (changed.has("floorId") && changed.get("floorId") !== undefined))) this._central = false;
+    // fork (fedgar): a garden bed chosen from the room buttons opens the bed's card (instead of a room panel)
+    if ((changed.has("roomId") || changed.has("_garden")) && this.roomId && this.gardenBed(this.roomId)) {
+      if (this._bedCard?.areaId !== this.roomId) {
+        this._plantCard = null;
+        this._plantEdit = null;
+        this._bedAdd = null;
+        this._bedCard = { floorId: this.gardenBed(this.roomId)!.floorId, areaId: this.roomId, at: null };
+        // the panel around hides its room panel for a bed (it may have drawn one before the garden came)
+        this.fire("garden-bed", { roomId: this.roomId });
+      }
+    } else if (changed.has("roomId") && changed.get("roomId") && this._bedCard?.areaId === changed.get("roomId")) {
+      // the bed was left (back, another room): its card goes with it
+      this._bedCard = null;
+      this._bedAdd = null;
+    }
     const v = this.viewer;
     if (!v) return;
     // a room or floor chosen elsewhere ends the look through a camera (the view is theirs now)
@@ -4998,6 +5013,13 @@ export class Fp3dView3d extends LitElement {
     return true;
   }
 
+  /** Fork (fedgar): the garden bed an outdoor area of the plan is (null: not a bed linked to a Homestead zone). */
+  gardenBed(outdoorId: string): Bed | null {
+    const b = this.building;
+    const floor = b?.floors.find((f) => f.outdoor?.some((o) => o.id === outdoorId));
+    return b && floor ? bedOf(b, this._garden, floor.id, outdoorId) : null;
+  }
+
   /** Fork (fedgar): plants are added, moved and removed from their cards (administrators only, like the editor). */
   private get gardenEditable(): boolean {
     return !!this.hass?.user?.is_admin && !this.ro;
@@ -5168,6 +5190,8 @@ export class Fp3dView3d extends LitElement {
     const close = () => {
       this._bedCard = null;
       this._bedAdd = null;
+      // opened from the room buttons: leave the bed as well
+      if (this.roomId === open.areaId) this.fire("room-tap", { floorId: open.floorId, roomId: open.areaId });
     };
     return html`<div class="fp3d-plant">
       <div class="fp3d-plant-head">
