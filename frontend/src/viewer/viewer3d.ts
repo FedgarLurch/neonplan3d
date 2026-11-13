@@ -127,6 +127,8 @@ export interface ViewerOptions {
   /** Furnishing in 3D: an item was selected (null: none) or dragged to a new place. */
   onFurnitureSelect?: (furnitureId: string | null) => void;
   onFurnitureMove?: (furnitureId: string, x: number, z: number) => void;
+  /** Fork (fedgar): tap on a furniture item outside furnishing; true when the item took the tap (a plant's card). */
+  onFurnitureTap?: (furnitureId: string, x: number, y: number) => boolean;
   onStats?: (stats: ViewerStats) => void;
   /** Text for the floor labels in the house view, e.g. "5 rooms". */
   floorInfo?: (floor: Floor) => string;
@@ -4260,6 +4262,11 @@ export class FloorplanViewer {
       this.invalidate();
       this.options.onDeviceTap?.(hit.entity, x, y);
       return;
+    }
+    // fork (fedgar): an item that answers taps (a garden plant opens its card) before the room behind it
+    if (!this.furnish && this.options.onFurnitureTap) {
+      const item = this.furnitureAt(x, y);
+      if (item && this.options.onFurnitureTap(item.id, x, y)) return;
     }
     this.options.onRoomTap?.(hit?.floorId ?? this.floorId ?? "", hit?.roomId ?? null);
   }
