@@ -4,7 +4,7 @@ This fork tracks [Mastershort/neonplan3d](https://github.com/Mastershort/neonpla
 The fork's version is upstream's plus a fourth number (2.2.0.N). Code changes are marked `fork (fedgar)` in comments.
 Installed through HACS from the `main` branch.
 
-## Garden (works with the HA Homestead fork, FedgarLurch/ha-homestead)
+## Garden (works with HA Homestead, arozoire/ha-homestead 0.20 or newer)
 
 Plants live in [HA Homestead](https://github.com/arozoire/ha-homestead) (plantings, beds as zones, diary); NeonPlan is the screen.
 
@@ -23,6 +23,7 @@ Plants live in [HA Homestead](https://github.com/arozoire/ha-homestead) (plantin
 - **Plant card** (tap a plant): bed, when it went in, growth (tap to change), last watered / fertilized / pruned, the
   last diary lines, buttons that log watering, feeding and pruning. ✎: rename, variety, move to another bed, remove
   (died, season over, pulled, or placed by mistake). The bed's valve waterings count from the day the plant went in.
+- Plants stand on the bed's surface: of outdoor areas inside one another, the innermost carries what stands there.
 - **Beds glow while their valve runs**, in the valve's colour; of beds sharing a valve with a hand-moved hose, only the
   one with the hose glows.
 
@@ -47,3 +48,4 @@ Plants live in [HA Homestead](https://github.com/arozoire/ha-homestead) (plantin
 | 2.2.0.14 | A tap on a bed inside a lawn opens the bed |
 | 2.2.0.15 | A plant's card counts the bed's waterings from the day it went in |
 | 2.2.0.16 | The room bar's bed buttons open the bed card instead of a room panel |
+| 2.2.0.17 | Plants (and anything else) standing in a bed drawn on a lawn stand on the bed, not through it |
