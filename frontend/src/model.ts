@@ -1046,8 +1046,9 @@ export function groundDrop(_floor: Floor, a: OutdoorArea, x: number, z: number):
 /** Height outdoor lamps stand on at a point: ground level, or the top of a terrace or bed there. */
 export function outdoorGround(floor: Floor, x: number, z: number): number {
   const inside = (floor.outdoor ?? []).filter((o) => !outdoorStanding(o.type) && o.type !== "pool" && pointInPolygon([x, z], o.points));
-  // an area cut out of the one beneath it wins over that one
-  const a = [...inside].reverse().find((o) => o.cut) ?? inside[0];
+  // an area cut out of the one beneath it wins over that one; fork (fedgar): else the innermost one – a bed
+  // drawn on a lawn carries what stands in it at the bed's height, not the lawn's
+  const a = [...inside].reverse().find((o) => o.cut) ?? inside.reduce<OutdoorArea | undefined>((best, o) => (!best || Math.abs(polygonArea(o.points)) < Math.abs(polygonArea(best.points)) ? o : best), undefined);
   return a ? outdoorTopAt(floor, a, x, z) : groundLevel(floor);
 }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyBuilding, lockAlong, gangEntities, gangPlateWidth, gangsOf, floorElevation, newFloor, outdoorZones, zonesOf, openingPreset, openingStyle, normalizeBuilding, outdoorDrop, outdoorGround, resizeFurniture, roomTiles, sidelightLayout, spotGrid, surfaceHeight, syncCameraLooks, type Furniture } from "./model.ts";
+import { emptyBuilding, lockAlong, gangEntities, gangPlateWidth, gangsOf, floorElevation, newFloor, outdoorZones, zonesOf, openingPreset, openingStyle, normalizeBuilding, outdoorDrop, outdoorGround, resizeFurniture, roomTiles, sidelightLayout, spotGrid, surfaceHeight, syncCameraLooks, type Floor, type Furniture, type Vec2 } from "./model.ts";
 
 test("a sidelight sits opposite the hinge, on the hinge side when asked, and keeps the leaf at least half a metre", () => {
   const none = {};
@@ -266,4 +266,14 @@ test("a camera's look hangs at the camera's height, not on the floor (#779)", ()
   const later = structuredClone(next);
   syncCameraLooks(later, next);
   assert.equal(later.floors[0].furniture[0].mount_y, 2.3);
+});
+
+test("fork (fedgar): something standing in a bed drawn on a lawn stands on the bed", () => {
+  const sq = (x: number, z: number, w: number): Vec2[] => [[x, z], [x + w, z], [x + w, z + w], [x, z + w]];
+  const floor = { ...newFloor("eg", "EG", 2.5), rooms: [], outdoor: [
+    { id: "lawn", type: "wild", points: sq(0, 0, 20) },
+    { id: "bed", type: "bed", points: sq(5, 5, 2) },
+  ] } as unknown as Floor;
+  // the bed's top (0.15) inside it, the lawn's (0.03) around it
+  assert.ok(Math.abs(outdoorGround(floor, 6, 6) - outdoorGround(floor, 1, 1) - (0.15 - 0.03)) < 1e-9);
 });
